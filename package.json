@@ -1,0 +1,34 @@
+{
+  "name": "zorveus-ts-sdk-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo for Zorveus TypeScript/JavaScript SDK and React library",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "npm run --workspaces build",
+    "test": "vitest run",
+    "typecheck": "npm run --workspaces typecheck",
+    "demo:node": "npx tsx examples/node-scripts/inference-demo.ts",
+    "demo:management": "npx tsx examples/node-scripts/management-demo.ts",
+    "demo:oauth": "npx tsx examples/node-scripts/oauth-pkce-demo.ts",
+    "demo:mindspire": "npm run --workspace=@zorveus/mindspire-studio dev",
+    "demo:saasify": "npm run --workspace=@zorveus/saasify-suite dev",
+    "demo:react": "npm run demo:mindspire"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "jsdom": "^24.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.2.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
