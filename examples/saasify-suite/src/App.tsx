@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Zorveus,
   ZorveusServiceClient,
@@ -935,8 +935,19 @@ export default function App(): React.JSX.Element {
   const env = (import.meta as unknown as { env?: Record<string, string> }).env || {};
   const appId = env.VITE_ZORVEUS_APP_ID || "resumecraft";
 
+  const keyMap: Record<string, string> = {
+    Starter: env.VITE_ZORVEUS_FREE_KEY || "",
+    Pro: env.VITE_ZORVEUS_PRO_KEY || "",
+    Executive: env.VITE_ZORVEUS_ENTERPRISE_KEY || ""
+  };
+
   const [page, setPage] = useState<"landing" | "signin" | "studio" | "admin" | "user-detail">("landing");
-  const [users, setUsers] = useState<CandidateAccount[]>(initialCandidates as CandidateAccount[]);
+  const [users, setUsers] = useState<CandidateAccount[]>(() => {
+    return (initialCandidates as CandidateAccount[]).map((c) => ({
+      ...c,
+      apiKey: keyMap[c.tier] || ""
+    }));
+  });
   const [activeCandidateId, setActiveCandidateId] = useState<string>("usr_sara_101");
   const [inspectedUserId, setInspectedUserId] = useState<string>("usr_sara_101");
   const [activeTool, setActiveTool] = useState<"cover_letter" | "bullets" | "ats">("cover_letter");
@@ -978,6 +989,12 @@ export default function App(): React.JSX.Element {
   const [grantReason, setGrantReason] = useState("Candidate Career Grant");
   const [grantModalError, setGrantModalError] = useState<string | null>(null);
 
+  // Model Selection State (STRICT ZERO FALLBACKS)
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name?: string; provider?: string }>>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState<boolean>(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+
   // Onboard User Modal State
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [newUserName, setNewUserName] = useState("");
@@ -989,6 +1006,73 @@ export default function App(): React.JSX.Element {
 
   const activeCandidate = users.find((u) => u.id === activeCandidateId) || users[0];
   const inspectedUser = users.find((u) => u.id === inspectedUserId) || users[0];
+
+  // Fetch available models strictly from Zorveus Gateway using active candidate's real key
+  useEffect(() => {
+    let isMounted = true;
+    const loadModels = async () => {
+      const activeKey = activeCandidate.apiKey;
+      if (!activeKey) {
+        if (isMounted) {
+          setModelsError(`Missing inference key for ${activeCandidate.tier} tier in .env (e.g. VITE_ZORVEUS_${activeCandidate.tier.toUpperCase()}_KEY)`);
+          setAvailableModels([]);
+          setIsLoadingModels(false);
+        }
+        return;
+      }
+
+      setIsLoadingModels(true);
+      setModelsError(null);
+
+      try {
+        const apiUrl = env.VITE_ZORVEUS_API_URL || "http://localhost:8000";
+        const gatewayBaseURL = env.VITE_ZORVEUS_GATEWAY_URL || `${apiUrl}/v1`;
+        const client = new Zorveus({
+          apiKey: activeKey,
+          baseURL: apiUrl,
+          gatewayBaseURL
+        });
+
+        const res = await client.models.list({ routeStatus: "available" });
+        console.log("%c[Zorveus SDK] client.models.list() Live Gateway Response:", "color: #059669; font-weight: bold; font-size: 13px;", res);
+
+        if (isMounted) {
+          if (res && Array.isArray(res.data) && res.data.length > 0) {
+            const formatted = res.data.map((m) => ({
+              id: m.id,
+              name: m.id,
+              provider: m.owned_by || m.id.split("/")[0] || "AI"
+            }));
+            setAvailableModels(formatted);
+            setSelectedModel((prev) => {
+              if (prev && formatted.some((m) => m.id === prev)) return prev;
+              return formatted[0].id;
+            });
+            setModelsError(null);
+          } else {
+            setAvailableModels([]);
+            setModelsError("Zorveus Gateway returned 0 available models for this inference key.");
+          }
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error("[Zorveus SDK] client.models.list() Error:", err);
+        if (isMounted) {
+          setModelsError(errorMsg);
+          setAvailableModels([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingModels(false);
+        }
+      }
+    };
+
+    void loadModels();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeCandidate.apiKey, activeCandidate.tier]);
 
   const getServiceClient = () => {
     const baseURL = env.VITE_ZORVEUS_API_URL || "http://localhost:8000";
@@ -1003,6 +1087,11 @@ export default function App(): React.JSX.Element {
     if (isStreaming) {
       abortControllerRef.current?.abort();
       setIsStreaming(false);
+      return;
+    }
+
+    if (!selectedModel) {
+      setGeneratedContent("**Generation Blocked**: No active AI model selected. Please ensure your inference key is valid and models are returned by the Zorveus Gateway.");
       return;
     }
 
@@ -1051,13 +1140,24 @@ Provide:
         gatewayBaseURL
       });
 
+      console.log(`[Zorveus SDK] Starting streaming with model "${selectedModel}" for candidate ${activeCandidate.id}`);
+
       const stream = await client.chat.completions.create({
-        model: "openai/gpt-4.1-mini",
+        model: selectedModel,
         messages: [
           { role: "system", content: "You are an executive resume writer and career strategist. Output cleanly formatted Markdown." },
           { role: "user", content: promptText }
         ],
-        stream: true
+        stream: true,
+        zorveusMetadata: {
+          externalUserId: activeCandidate.id,
+          displayName: activeCandidate.name,
+          userEmail: activeCandidate.email,
+          metadata: {
+            tier: activeCandidate.tier,
+            tool: activeTool
+          }
+        }
       });
 
       let accumulated = "";
@@ -1482,6 +1582,47 @@ Provide:
                 </button>
               </div>
 
+              {/* Live Zorveus Models Selector (Strict live queries, ZERO fallbacks) */}
+              <div style={{ backgroundColor: "#F8FAFC", border: "1px solid #E2E8F0", padding: "12px", borderRadius: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 700, color: "#0F172A" }}>Available AI Model (Live Gateway)</label>
+                  <span style={{ fontSize: "11px", color: isLoadingModels ? "#2563EB" : modelsError ? "#DC2626" : "#059669", fontWeight: 600 }}>
+                    {isLoadingModels ? "Syncing..." : modelsError ? "Gateway Error" : `${availableModels.length} live models`}
+                  </span>
+                </div>
+
+                {modelsError ? (
+                  <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", padding: "8px 10px", borderRadius: "6px", fontSize: "11px", color: "#991B1B" }}>
+                    <div style={{ fontWeight: 700 }}>Zorveus Gateway Error:</div>
+                    <div style={{ fontFamily: "monospace", marginTop: "2px" }}>{modelsError}</div>
+                    <div style={{ fontSize: "10px", color: "#7F1D1D", marginTop: "4px" }}>
+                      Queried: <code>GET /v1/models?route_status=available</code>
+                    </div>
+                  </div>
+                ) : availableModels.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "#64748B", padding: "6px 0" }}>
+                    {isLoadingModels ? "Fetching available models from Zorveus..." : "No models available for this inference key."}
+                  </div>
+                ) : (
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    disabled={isStreaming || availableModels.length === 0}
+                    style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #CBD5E1", fontSize: "12px", fontWeight: 600, color: "#0F172A", backgroundColor: "#FFFFFF" }}
+                  >
+                    {availableModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.provider ? `[${m.provider}] ` : ""}{m.name || m.id}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <div style={{ fontSize: "11px", color: "#64748B", marginTop: "6px" }}>
+                  Routing via <strong style={{ color: "#0F172A" }}>{activeCandidate.tier} Key</strong>: <code style={{ fontSize: "10px" }}>{activeCandidate.apiKey ? `${activeCandidate.apiKey.slice(0, 16)}...` : "Not Configured"}</code>
+                </div>
+              </div>
+
               {/* Form 1: Cover Letter */}
               {activeTool === "cover_letter" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -1504,12 +1645,9 @@ Provide:
               {activeTool === "bullets" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                   <div>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155", display: "block", marginBottom: "4px" }}>Draft Experience Bullets</label>
-                    <textarea rows={6} value={draftBullets} onChange={(e) => setDraftBullets(e.target.value)} style={{ width: "100%", fontSize: "13px" }} placeholder="Paste draft bullet points..." />
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "#334155", display: "block", marginBottom: "4px" }}>Draft Resume Bullets</label>
+                    <textarea rows={6} value={draftBullets} onChange={(e) => setDraftBullets(e.target.value)} style={{ width: "100%", fontSize: "13px" }} placeholder="Paste unformatted or draft bullets..." />
                   </div>
-                  <p style={{ fontSize: "11px", color: "#64748B", lineHeight: 1.5 }}>
-                    Refines drafts into Google XYZ quantified impact statements.
-                  </p>
                 </div>
               )}
 
@@ -1540,8 +1678,9 @@ Provide:
                 )}
               </button>
 
-              <div style={{ backgroundColor: "#F8FAFC", border: "1px solid #E2E8F0", padding: "8px 10px", borderRadius: "6px", fontSize: "11px", color: "#64748B" }}>
-                Attributed User: <code style={{ color: "#0F172A", fontWeight: 600 }}>{activeCandidate.id}</code>
+              <div style={{ backgroundColor: "#F8FAFC", border: "1px solid #E2E8F0", padding: "8px 10px", borderRadius: "6px", fontSize: "11px", color: "#64748B", display: "flex", justifyContent: "space-between" }}>
+                <span>User: <code style={{ color: "#0F172A", fontWeight: 600 }}>{activeCandidate.id}</code></span>
+                <span>Model: <code style={{ color: "#0F172A", fontWeight: 600 }}>{selectedModel.split("/")[1] || selectedModel}</code></span>
               </div>
             </div>
 
