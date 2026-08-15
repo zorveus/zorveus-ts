@@ -26,12 +26,14 @@ export class ProductUsers {
 
   /**
    * Upserts a product user by external user ID (`PUT /product-users/by-external-id`).
+   * Creates the user if they do not exist, or updates their profile if they do.
    */
   async createOrUpdate(
     params: UpsertProductUserParams,
     options: RequestOptions = {}
   ): Promise<UpsertProductUserResponse> {
     const payload = {
+      ...(params.appId ? { app_id: params.appId } : {}),
       external_user_id: params.externalUserId,
       display_name: params.displayName ?? null,
       email: params.email ?? null,
@@ -46,6 +48,16 @@ export class ProductUsers {
       query,
       ...options
     });
+  }
+
+  /**
+   * Alias for `createOrUpdate` (`PUT /product-users/by-external-id`).
+   */
+  async upsert(
+    params: UpsertProductUserParams,
+    options: RequestOptions = {}
+  ): Promise<UpsertProductUserResponse> {
+    return this.createOrUpdate(params, options);
   }
 
   /**

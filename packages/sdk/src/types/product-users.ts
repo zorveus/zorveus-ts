@@ -67,6 +67,7 @@ export interface ProductUserListResponse {
 
 export interface UpsertProductUserParams {
   orgId?: string;
+  appId?: string;
   externalUserId: string;
   displayName?: string | null;
   email?: string | null;

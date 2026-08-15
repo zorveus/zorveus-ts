@@ -1,0 +1,74 @@
+[
+  {
+    "id": "usr_sara_101",
+    "name": "Sarah Jenkins",
+    "email": "sara@gmail.com",
+    "tier": "Pro",
+    "baseCap": 50.0,
+    "spentMonth": 0.0,
+    "extraGrants": 0.0,
+    "apiKey": "zrv_live_pro_key_50",
+    "status": "Active",
+    "tokensUsed": 0
+  },
+  {
+    "id": "usr_david_204",
+    "name": "David Kim",
+    "email": "david@startup.io",
+    "tier": "Starter",
+    "baseCap": 10.0,
+    "spentMonth": 0.0,
+    "extraGrants": 0.0,
+    "apiKey": "zrv_live_free_key_10",
+    "status": "Active",
+    "tokensUsed": 0
+  },
+  {
+    "id": "usr_elena_309",
+    "name": "Elena Rostova",
+    "email": "elena@enterprise.org",
+    "tier": "Executive",
+    "baseCap": 250.0,
+    "spentMonth": 0.0,
+    "extraGrants": 50.0,
+    "apiKey": "zrv_live_ent_key_500",
+    "status": "Active",
+    "tokensUsed": 0
+  },
+  {
+    "id": "usr_marcus_412",
+    "name": "Marcus Vance",
+    "email": "marcus@techcorp.io",
+    "tier": "Pro",
+    "baseCap": 50.0,
+    "spentMonth": 12.4,
+    "extraGrants": 15.0,
+    "apiKey": "zrv_live_pro_key_50",
+    "status": "Active",
+    "tokensUsed": 14280
+  },
+  {
+    "id": "usr_chloe_521",
+    "name": "Chloe Dubois",
+    "email": "chloe@designhub.co",
+    "tier": "Starter",
+    "baseCap": 10.0,
+    "spentMonth": 8.9,
+    "extraGrants": 0.0,
+    "apiKey": "zrv_live_free_key_10",
+    "status": "Active",
+    "tokensUsed": 9850
+  },
+  {
+    "id": "usr_alex_8842",
+    "name": "Alex Rivera",
+    "email": "alex@acme.com",
+    "tier": "Pro",
+    "baseCap": 50.0,
+    "spentMonth": 3.2,
+    "extraGrants": 25.0,
+    "apiKey": "zrv_live_pro_key_50",
+    "status": "Active",
+    "tokensUsed": 4120
+  }
+]
