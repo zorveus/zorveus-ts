@@ -1,30 +1,45 @@
-# Zorveus Node.js & TypeScript Automation Scripts
+# Zorveus Node.js Standalone Automation Scripts
 
-Standalone CLI scripts demonstrating core workflows of the `@zorveus/sdk` package in Node.js environments.
+A collection of standalone, ready-to-run TypeScript automation scripts demonstrating `@zorveus/sdk` in Node.js backend environments.
 
 ---
 
-## 📜 Available Scripts
+## 📁 Included Scripts
 
-### 1. `inference-demo.ts`
-Demonstrates basic chat completions and real-time streaming with custom spend caps:
+1. **`basic-inference.ts`**: Non-streaming and streaming chat completions across foundation models.
+2. **`user-management.ts`**: Product user provisioning (`PUT /product-users/by-external-id`), profile inspection, and credit summary.
+3. **`grant-credits.ts`**: Promotional credit issuance anchored to external user ID (`POST /product-users/by-external-id/credit-grants`) and ledger inspection (`GET /product-users/by-external-id/credit-grants`).
+4. **`oauth-pkce-flow.ts`**: Complete OAuth 2.0 PKCE URL generation and token exchange simulation.
+
+---
+
+## 🚀 Running the Scripts
+
+### 1. Configure Environment Variables
+Set your keys in your shell or `.env`:
 ```bash
-npx tsx examples/node-scripts/inference-demo.ts
+export ZORVEUS_INFERENCE_KEY="zrv_..."
+export ZORVEUS_SERVICE_KEY="zrv_svc_..."
+export ZORVEUS_APP_ID="app_..."
 ```
 
-### 2. `management-demo.ts`
-Demonstrates Control Plane operations:
-- Provisioning product users via `createOrUpdate` (`PUT /product-users/by-external-id`)
-- Querying live caps and balances
-- Issuing promotional credit grants via `grantCredit`
-- Listing the persistent credit grant ledger via `listCreditGrants`
-
+### 2. Execute with `tsx`
 ```bash
-npx tsx examples/node-scripts/management-demo.ts
+# Test AI inference streaming
+npx tsx src/basic-inference.ts
+
+# Test product user provisioning
+npx tsx src/user-management.ts
+
+# Test issuing AI credits via external ID
+npx tsx src/grant-credits.ts
+
+# Test OAuth PKCE generator
+npx tsx src/oauth-pkce-flow.ts
 ```
 
-### 3. `oauth-pkce-demo.ts`
-Demonstrates full OAuth 2.0 PKCE flow in Node.js (generating code verifier, challenge, authorization URL, and code token exchange).
-```bash
-npx tsx examples/node-scripts/oauth-pkce-demo.ts
-```
+---
+
+## 📄 License
+
+MIT © [Zorveus Inc.](https://zorveus.com)
