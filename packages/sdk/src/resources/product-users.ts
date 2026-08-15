@@ -11,9 +11,11 @@ import type {
   GetProductUserCreditSummaryByExternalIdParams,
   ProductUserCreditSummaryResponse,
   GrantCreditParams,
+  GrantCreditByExternalIdParams,
   GrantProductUserCreditsResponse,
   ProductUserCreditGrantListResponse,
   ListCreditGrantsParams,
+  ListCreditGrantsByExternalIdParams,
   RevokeProductUserCreditGrantResponse
 } from "../types/product-users";
 
@@ -183,20 +185,85 @@ export class ProductUsers {
   }
 
   /**
+   * Grants credits to an end user by external ID (`POST /product-users/by-external-id/credit-grants`).
+   * Automatically provisions the product user if they do not exist yet.
+   */
+  async grantCreditByExternalId(
+    params: GrantCreditByExternalIdParams,
+    options: RequestOptions = {}
+  ): Promise<GrantProductUserCreditsResponse> {
+    assertDecimalString(params.amount, "grantCreditByExternalId.amount");
+
+    const payload = {
+      app_id: params.appId,
+      external_user_id: params.externalUserId,
+      display_name: params.displayName ?? null,
+      email: params.email ?? null,
+      amount: params.amount,
+      currency: params.currency || "USD",
+      source: params.source ?? null,
+      reason: params.reason ?? null,
+      expires_at: params.expiresAt ?? null,
+      metadata: params.metadata ?? null
+    };
+
+    const query = params.orgId ? { org_id: params.orgId } : undefined;
+
+    return this.transport.request<GrantProductUserCreditsResponse>(
+      "/product-users/by-external-id/credit-grants",
+      {
+        method: "POST",
+        body: payload,
+        query,
+        ...options
+      }
+    );
+  }
+
+  /**
    * Lists credit grants for a product user (`GET /product-users/{id}/credit-grants`).
+   * Accepts either an external user ID or a Zorveus product user ID.
    */
   async listCreditGrants(
-    productEndUserId: string,
+    userIdentifier: string,
     params: ListCreditGrantsParams = {},
     options: RequestOptions = {}
   ): Promise<ProductUserCreditGrantListResponse> {
     const query: Record<string, unknown> = {};
+    if (params.appId) query.app_id = params.appId;
     if (params.orgId) query.org_id = params.orgId;
     if (params.limit !== undefined) query.limit = params.limit;
     if (params.offset !== undefined) query.offset = params.offset;
 
     return this.transport.request<ProductUserCreditGrantListResponse>(
-      `/product-users/${encodeURIComponent(productEndUserId)}/credit-grants`,
+      `/product-users/${encodeURIComponent(userIdentifier)}/credit-grants`,
+      {
+        method: "GET",
+        query,
+        ...options
+      }
+    );
+  }
+
+  /**
+   * Lists credit grants for a product user by external ID (`GET /product-users/by-external-id/credit-grants`).
+   */
+  async listCreditGrantsByExternalId(
+    params: ListCreditGrantsByExternalIdParams,
+    options: RequestOptions = {}
+  ): Promise<ProductUserCreditGrantListResponse> {
+    const query: Record<string, unknown> = {
+      app_id: params.appId,
+      external_user_id: params.externalUserId
+    };
+
+    if (params.status) query.status = params.status;
+    if (params.source) query.source = params.source;
+    if (params.limit !== undefined) query.limit = params.limit;
+    if (params.orgId) query.org_id = params.orgId;
+
+    return this.transport.request<ProductUserCreditGrantListResponse>(
+      "/product-users/by-external-id/credit-grants",
       {
         method: "GET",
         query,

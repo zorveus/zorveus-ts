@@ -193,6 +193,117 @@ describe("Product Users Management", () => {
     expect(res.credit_summary.total_remaining).toBe("50.0000");
   });
 
+  it("grants credits by external ID via POST /product-users/by-external-id/credit-grants", async () => {
+    const mockResponse = {
+      product_user: {
+        product_end_user_id: "peu_9f595afb85a44217",
+        org_id: "org_startup_123",
+        app_id: "app_startup_123",
+        external_user_id: "user-123",
+        display_name: "Jane Doe",
+        email_hash: null,
+        status: "active",
+        metadata: null,
+        usage: {}
+      },
+      credit_grant: {
+        credit_grant_id: "pucg_9f595afb85a44217",
+        org_id: "org_startup_123",
+        app_id: "app_startup_123",
+        product_end_user_id: "peu_9f595afb85a44217",
+        amount: "25.000000000000",
+        remaining_amount: "25.000000000000",
+        currency: "USD",
+        source: "promotion",
+        reason: "Upgrade promo bonus",
+        status: "active",
+        expires_at: "2026-12-31T23:59:59Z",
+        metadata: { promo_code: "SUMMER2026" },
+        created_at: "2026-08-15T12:00:00Z",
+        updated_at: "2026-08-15T12:00:00Z"
+      },
+      credit_summary: {
+        currency: "USD",
+        active_grants_count: 1,
+        total_granted_amount: "25.000000000000",
+        remaining_balance: "25.000000000000",
+        expiring_soon_amount: "25.000000000000",
+        next_expiration_at: "2026-12-31T23:59:59Z"
+      }
+    };
+
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(mockResponse), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    const client = new ZorveusServiceClient({ apiKey: "zrv_service_key_123" });
+    const res = await client.productUsers.grantCreditByExternalId({
+      appId: "app_startup_123",
+      externalUserId: "user-123",
+      displayName: "Jane Doe",
+      email: "jane@example.com",
+      amount: "25.000000000000",
+      source: "promotion",
+      reason: "Upgrade promo bonus"
+    });
+
+    expect(res.credit_grant.credit_grant_id).toBe("pucg_9f595afb85a44217");
+    expect(res.credit_grant.amount).toBe("25.000000000000");
+    expect(res.credit_grant.source).toBe("promotion");
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.zorveus.com/product-users/by-external-id/credit-grants",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("lists credit grants by external ID via GET /product-users/by-external-id/credit-grants", async () => {
+    const mockGrants = {
+      credit_grants: [
+        {
+          credit_grant_id: "pucg_9f595afb85a44217",
+          org_id: "org_startup_123",
+          app_id: "app_startup_123",
+          product_end_user_id: "peu_9f595afb85a44217",
+          amount: "10.000000000000",
+          remaining_amount: "8.500000000000",
+          currency: "USD",
+          source: "signup_bonus",
+          reason: "Welcome credits",
+          status: "active",
+          expires_at: "2026-12-31T23:59:59Z",
+          metadata: { campaign: "launch_2026" },
+          created_at: "2026-08-15T12:00:00Z",
+          updated_at: "2026-08-15T12:30:00Z"
+        }
+      ]
+    };
+
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(mockGrants), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    const client = new ZorveusServiceClient({ apiKey: "zrv_service_key_123" });
+    const res = await client.productUsers.listCreditGrantsByExternalId({
+      appId: "app_startup_123",
+      externalUserId: "user-123",
+      status: "active"
+    });
+
+    expect(res.credit_grants).toHaveLength(1);
+    expect(res.credit_grants[0].credit_grant_id).toBe("pucg_9f595afb85a44217");
+    expect(res.credit_grants[0].source).toBe("signup_bonus");
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/product-users/by-external-id/credit-grants?app_id=app_startup_123&external_user_id=user-123&status=active"),
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("throws InvalidDecimalError when amount is not a valid decimal string", async () => {
     const client = new ZorveusServiceClient({ apiKey: "zrv_service_key_123" });
     await expect(

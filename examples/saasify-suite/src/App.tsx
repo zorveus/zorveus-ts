@@ -590,14 +590,9 @@ function UserDetailPage({
                   <RefreshIcon size={12} /> {isLoadingUser ? "Syncing..." : "Refresh Details"}
                 </button>
               </div>
-              <div style={{ fontSize: "13px", color: "#64748B", marginTop: "2px" }}>
-                Email: <strong style={{ color: "#0F172A" }}>{user.email}</strong> · External ID: <code style={{ color: "#0F172A", fontWeight: 600 }}>{user.id}</code> · App: <code>{appId}</code>
+              <div style={{ fontSize: "13px", color: "#64748B", marginTop: "4px" }}>
+                Email: <strong style={{ color: "#0F172A" }}>{user.email}</strong> · External ID: <code style={{ color: "#0F172A", fontWeight: 600 }}>{user.id}</code>
               </div>
-              {backendUser?.product_end_user_id && (
-                <div style={{ fontSize: "12px", color: "#64748B", marginTop: "4px" }}>
-                  Zorveus Product User ID: <code style={{ color: "#0F172A" }}>{backendUser.product_end_user_id}</code>
-                </div>
-              )}
             </div>
           </div>
 
@@ -1208,20 +1203,21 @@ Provide:
       console.log("[Zorveus SDK] Product User Object:", userRes);
       console.log("[Zorveus SDK] Raw JSON:\n" + JSON.stringify(res, null, 2));
 
-      // Fetch persistent credit grants list directly from Zorveus backend
-      if (userRes.product_end_user_id) {
-        try {
-          const grantsRes = await service.productUsers.listCreditGrants(userRes.product_end_user_id);
-          console.log(
-            "%c[Zorveus SDK] Credit Grants Ledger Response:",
-            "color: #2563EB; font-weight: bold; font-size: 13px;",
-            grantsRes
-          );
-          setCreditGrants(grantsRes.credit_grants || []);
-        } catch (grantErr) {
-          console.warn("[Zorveus SDK] Failed to load credit grants:", grantErr);
-          setCreditGrants([]);
-        }
+      // Fetch persistent credit grants list directly using candidate's external user ID
+      try {
+        const grantsRes = await service.productUsers.listCreditGrantsByExternalId({
+          appId,
+          externalUserId: user.id
+        });
+        console.log(
+          "%c[Zorveus SDK] Credit Grants Ledger Response for external ID (" + user.id + "):",
+          "color: #2563EB; font-weight: bold; font-size: 13px;",
+          grantsRes
+        );
+        setCreditGrants(grantsRes.credit_grants || []);
+      } catch (grantErr) {
+        console.warn("[Zorveus SDK] Failed to load credit grants for " + user.id + ":", grantErr);
+        setCreditGrants([]);
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -1268,7 +1264,7 @@ Provide:
     setShowGrantModal(true);
   };
 
-  // Submit Credit Grant via grantCredit SDK method
+  // Submit Credit Grant via grantCreditByExternalId SDK method using external user ID
   const handleConfirmGrantCredits = async () => {
     const target = grantTargetUser || inspectedUser;
     if (!target) return;
@@ -1278,11 +1274,15 @@ Provide:
     setAdminStatusMessage(null);
     try {
       const service = getServiceClient();
-      const targetId = backendUser?.product_end_user_id || target.id;
 
-      await service.productUsers.grantCredit(targetId, {
+      // Anchor credit grant directly to external user ID
+      await service.productUsers.grantCreditByExternalId({
         appId,
+        externalUserId: target.id,
+        displayName: target.name,
+        email: target.email,
         amount: grantAmount,
+        source: "promotion",
         reason: grantReason
       });
 
@@ -1313,7 +1313,6 @@ Provide:
     if (!newUserName || !newUserEmail) return;
 
     const capMap = { Starter: 10.0, Pro: 50.0, Executive: 250.0 };
-    const keyMap = { Starter: "zrv_live_free_key_10", Pro: "zrv_live_pro_key_50", Executive: "zrv_live_ent_key_500" };
     const newId = `usr_${newUserEmail.split("@")[0].replace(/[^a-zA-Z0-9]/g, "_")}`;
 
     const newAccount: CandidateAccount = {
@@ -1324,7 +1323,7 @@ Provide:
       baseCap: capMap[newUserTier],
       spentMonth: 0,
       extraGrants: 0,
-      apiKey: keyMap[newUserTier],
+      apiKey: keyMap[newUserTier] || "",
       status: "Active",
       tokensUsed: 0
     };

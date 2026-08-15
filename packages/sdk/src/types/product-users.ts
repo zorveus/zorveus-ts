@@ -89,6 +89,16 @@ export interface GetProductUserCreditSummaryByExternalIdParams {
 
 export type CreditGrantStatus = "active" | "exhausted" | "expired" | "revoked";
 
+export type CreditGrantSource =
+  | "admin_adjustment"
+  | "service_key"
+  | "purchase"
+  | "promotion"
+  | "monthly_allowance"
+  | "support_credit"
+  | "import"
+  | (string & {});
+
 export interface ProductUserCreditGrantResponse {
   credit_grant_id: string;
   org_id: string;
@@ -134,10 +144,34 @@ export interface GrantCreditParams {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface GrantCreditByExternalIdParams {
+  appId: string;
+  externalUserId: string;
+  amount: string; // Decimal string
+  displayName?: string | null;
+  email?: string | null;
+  currency?: string;
+  source?: CreditGrantSource;
+  reason?: string | null;
+  expiresAt?: string | null;
+  metadata?: Record<string, unknown> | null;
+  orgId?: string;
+}
+
 export interface ListCreditGrantsParams {
+  appId?: string;
   orgId?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface ListCreditGrantsByExternalIdParams {
+  appId: string;
+  externalUserId: string;
+  status?: CreditGrantStatus;
+  source?: CreditGrantSource;
+  limit?: number;
+  orgId?: string;
 }
 
 export interface ProductUserListParams {
