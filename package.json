@@ -8,7 +8,7 @@
     "examples/*"
   ],
   "scripts": {
-    "build": "npm run --workspaces build",
+    "build": "npm run --workspace=@zorveus/sdk build && npm run --workspace=@zorveus/react build",
     "test": "vitest run",
     "typecheck": "npm run --workspaces typecheck",
     "demo:node": "npx tsx examples/node-scripts/inference-demo.ts",

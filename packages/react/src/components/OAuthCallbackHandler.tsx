@@ -25,11 +25,7 @@ export function OAuthCallbackHandler({
     const error = urlParams.get("error") || undefined;
     const errorDescription = urlParams.get("error_description") || undefined;
 
-    console.log("[OAuthCallbackHandler] Callback URL Search:", window.location.search);
-    console.log("[OAuthCallbackHandler] Parsed params:", { code, state, error, errorDescription });
-
     if (!code && !error) {
-      console.warn("[OAuthCallbackHandler] No code or error found in URL search params.");
       return;
     }
 
@@ -39,9 +35,7 @@ export function OAuthCallbackHandler({
     if (error) payload.error = error;
     if (errorDescription) payload.error_description = errorDescription;
 
-    console.log("[OAuthCallbackHandler] Broadcasting payload to parent:", payload);
-
-    // Channel 1: postMessage to opener
+    // Channel 1: postMessage to opener with strict origin check
     if (window.opener) {
       try {
         window.opener.postMessage(
@@ -49,14 +43,11 @@ export function OAuthCallbackHandler({
             type: "ZORVEUS_OAUTH_RESPONSE",
             payload
           },
-          "*"
+          window.location.origin
         );
-        console.log("[OAuthCallbackHandler] Broadcasted via postMessage to window.opener");
-      } catch (err) {
-        console.warn("[OAuthCallbackHandler] postMessage broadcast failed:", err);
+      } catch {
+        // Fall back to localStorage channel
       }
-    } else {
-      console.log("[OAuthCallbackHandler] window.opener is not available (using localStorage channel)");
     }
 
     // Channel 2: localStorage storage event broadcast
@@ -68,9 +59,8 @@ export function OAuthCallbackHandler({
           timestamp: Date.now()
         })
       );
-      console.log("[OAuthCallbackHandler] Broadcasted via localStorage storage event");
-    } catch (err) {
-      console.warn("[OAuthCallbackHandler] localStorage write failed:", err);
+    } catch {
+      // Ignore storage write errors
     }
 
     if (code) {

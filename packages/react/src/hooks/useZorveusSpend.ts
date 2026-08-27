@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { AuthenticationError, type InferenceKeyUsageResponse, type ZorveusError } from "@zorveus/sdk";
 import { useOptionalZorveusContext } from "../context/ZorveusContext";
 
@@ -36,30 +36,48 @@ export function useZorveusSpend(options: UseZorveusSpendOptions = {}): UseZorveu
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<ZorveusError | Error | null>(null);
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const fetchUsage = useCallback(async () => {
     if (!client) {
-      setIsLoading(false);
-      setUsage(null);
-      setError(
-        new AuthenticationError("Authentication required. Connect your AI wallet to view spend and usage.", {
-          code: "unauthenticated"
-        })
-      );
+      if (isMountedRef.current) {
+        setIsLoading(false);
+        setUsage(null);
+        setError(
+          new AuthenticationError("Authentication required. Connect your AI wallet to view spend and usage.", {
+            code: "unauthenticated"
+          })
+        );
+      }
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
+    if (isMountedRef.current) {
+      setIsLoading(true);
+      setError(null);
+    }
 
     try {
       const data = await client.getUsage();
-      setUsage(data);
+      if (isMountedRef.current) {
+        setUsage(data);
+      }
     } catch (err: unknown) {
-      const errorObj = err instanceof Error ? err : new Error(String(err));
-      setError(errorObj);
-      setUsage(null);
+      if (isMountedRef.current) {
+        const errorObj = err instanceof Error ? err : new Error(String(err));
+        setError(errorObj);
+        setUsage(null);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [client]);
 

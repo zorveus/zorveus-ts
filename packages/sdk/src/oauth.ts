@@ -142,16 +142,6 @@ export class ZorveusOAuth {
       headers["User-Agent"] = "@zorveus/sdk/0.1.0";
     }
 
-    console.log("[ZorveusOAuth.exchangeToken] Request details:", {
-      url,
-      grant_type: "authorization_code",
-      client_id: params.clientId,
-      code_length: params.code?.length,
-      code_verifier_length: params.codeVerifier?.length,
-      redirect_uri: params.redirectUri,
-      has_client_secret: Boolean(params.clientSecret)
-    });
-
     const response = await fetch(url, {
       method: "POST",
       headers,
@@ -166,29 +156,10 @@ export class ZorveusOAuth {
         errorBody = await response.text();
       }
 
-      console.error("[ZorveusOAuth.exchangeToken] Server returned error:", {
-        status: response.status,
-        statusText: response.statusText,
-        errorBody,
-        requestParams: {
-          client_id: params.clientId,
-          redirect_uri: params.redirectUri,
-          code: params.code ? `${params.code.slice(0, 10)}...` : undefined,
-          code_verifier: params.codeVerifier ? `${params.codeVerifier.slice(0, 10)}...` : undefined
-        }
-      });
-
       throw createAPIError(response.status, errorBody);
     }
 
     const tokenData = (await response.json()) as OAuthTokenResponse;
-    console.log("[ZorveusOAuth.exchangeToken] Token exchange successful:", {
-      token_type: tokenData.token_type,
-      scope: tokenData.scope,
-      app_connection_id: tokenData.app_connection_id,
-      expires_in: tokenData.expires_in
-    });
-
     return tokenData;
   }
 

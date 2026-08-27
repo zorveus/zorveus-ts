@@ -790,7 +790,7 @@ Provide:
                         )}
                         {availableModels.map((m: Model) => (
                           <option key={m.id} value={m.id}>
-                            {m.id} {m.owned_by ? `(${m.owned_by})` : ""}
+                            {m.id}{m.owned_by && !m.id.includes("/") ? ` (${m.owned_by})` : ""}
                           </option>
                         ))}
                       </select>

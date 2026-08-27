@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { ChatMessage, ZorveusMetadata } from "@zorveus/sdk";
 import { useZorveusContext } from "../context/ZorveusContext";
 
@@ -39,13 +39,27 @@ export function useZorveusInference(options: UseZorveusInferenceOptions): UseZor
   const [error, setError] = useState<Error | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isMountedRef = useRef(true);
 
   const abort = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    setIsStreaming(false);
+    if (isMountedRef.current) {
+      setIsStreaming(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
   }, []);
 
   const clearMessages = useCallback(() => {
@@ -88,6 +102,7 @@ export function useZorveusInference(options: UseZorveusInferenceOptions): UseZor
       setMessages([...currentMessages, { role: "assistant", content: "" }]);
 
       abortControllerRef.current = new AbortController();
+      let assistantContent = "";
 
       try {
         const stream = await client.chat.completions.create(
@@ -101,30 +116,38 @@ export function useZorveusInference(options: UseZorveusInferenceOptions): UseZor
           { signal: abortControllerRef.current.signal }
         );
 
-        let assistantContent = "";
-
         for await (const chunk of stream) {
           const delta = chunk.choices[0]?.delta?.content || "";
           if (delta) {
             assistantContent += delta;
-            setMessages((prev) => {
-              const updated = [...prev];
-              const lastIdx = updated.length - 1;
-              if (lastIdx >= 0 && updated[lastIdx]?.role === "assistant") {
-                updated[lastIdx] = { role: "assistant", content: assistantContent };
-              }
-              return updated;
-            });
+            if (isMountedRef.current) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const lastIdx = updated.length - 1;
+                if (lastIdx >= 0 && updated[lastIdx]?.role === "assistant") {
+                  updated[lastIdx] = { role: "assistant", content: assistantContent };
+                }
+                return updated;
+              });
+            }
           }
         }
       } catch (err) {
         const isAborted = err instanceof Error && err.name === "AbortError";
-        if (!isAborted) {
-          const finalErr = err instanceof Error ? err : new Error(String(err));
-          setError(finalErr);
+        if (isMountedRef.current) {
+          if (!isAborted) {
+            const finalErr = err instanceof Error ? err : new Error(String(err));
+            setError(finalErr);
+          }
+          if (!assistantContent) {
+            // Remove empty assistant placeholder if no content was streamed
+            setMessages((prev) => prev.filter((m, idx) => !(idx === prev.length - 1 && m.role === "assistant" && !m.content)));
+          }
         }
       } finally {
-        setIsStreaming(false);
+        if (isMountedRef.current) {
+          setIsStreaming(false);
+        }
         abortControllerRef.current = null;
       }
     },

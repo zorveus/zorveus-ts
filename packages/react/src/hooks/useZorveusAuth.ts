@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { ZorveusOAuth } from "@zorveus/sdk";
 import { useZorveusContext } from "../context/ZorveusContext";
 
@@ -28,18 +28,23 @@ export function useZorveusAuth(): UseZorveusAuthReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const connect = useCallback(
     async (scopes: string[] = ["inference:write", "models:*"]) => {
-      setIsLoading(true);
-      setError(null);
+      if (isMountedRef.current) {
+        setIsLoading(true);
+        setError(null);
+      }
 
       try {
         const pkce = await ZorveusOAuth.generatePKCE();
-        console.log("[useZorveusAuth] Initialized PKCE credentials:", {
-          state: pkce.state,
-          codeChallenge: pkce.codeChallenge,
-          codeVerifierPrefix: `${pkce.codeVerifier.slice(0, 8)}...`
-        });
 
         if (typeof window !== "undefined") {
           window.sessionStorage.setItem("zorveus_oauth_verifier", pkce.codeVerifier);
@@ -54,13 +59,14 @@ export function useZorveusAuth(): UseZorveusAuthReturn {
           scopes,
           baseURL: authBaseUrl
         });
-        console.log("[useZorveusAuth] Authorization URL generated:", authUrl);
 
         // Launch OAuth Consent Popup
         const width = 540;
         const height = 680;
-        const left = window.screen.width / 2 - width / 2;
-        const top = window.screen.height / 2 - height / 2;
+        const screenX = typeof window.screenX !== "undefined" ? window.screenX : window.screenLeft ?? 0;
+        const screenY = typeof window.screenY !== "undefined" ? window.screenY : window.screenTop ?? 0;
+        const left = screenX + (window.outerWidth / 2 - width / 2);
+        const top = screenY + (window.outerHeight / 2 - height / 2);
 
         const popup = window.open(
           authUrl,
@@ -105,26 +111,19 @@ export function useZorveusAuth(): UseZorveusAuthReturn {
             isProcessing = true;
             cleanup();
 
-            console.log("[useZorveusAuth] Received callback payload:", payload);
-
             const validation = ZorveusOAuth.validateCallback({
               urlOrParams: payload || {},
               expectedState: pkce.state
             });
-
-            console.log("[useZorveusAuth] Callback validation result:", validation);
 
             if (!validation.valid || !validation.code) {
               if (popup && !popup.closed) popup.close();
               const err = new Error(
                 validation.errorDescription || validation.error || "OAuth callback validation failed."
               );
-              console.error("[useZorveusAuth] OAuth Validation Error:", err);
               reject(err);
               return;
             }
-
-            console.log("[useZorveusAuth] Exchanging authorization code for inference key token...");
 
             // Exchange code for token
             ZorveusOAuth.exchangeToken({
@@ -136,14 +135,12 @@ export function useZorveusAuth(): UseZorveusAuthReturn {
               baseURL: authBaseUrl
             })
               .then((tokenRes) => {
-                console.log("[useZorveusAuth] OAuth token exchange completed successfully!");
                 if (popup && !popup.closed) popup.close();
                 setOAuthSession(tokenRes);
                 resolve();
               })
               .catch((err) => {
                 if (popup && !popup.closed) popup.close();
-                console.error("[useZorveusAuth] OAuth Exchange Error:", err);
                 reject(err);
               });
           };
@@ -172,6 +169,7 @@ export function useZorveusAuth(): UseZorveusAuthReturn {
           }, 100);
 
           const handleMessage = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
             if (event.data?.type !== "ZORVEUS_OAUTH_RESPONSE") return;
             processPayload(event.data.payload || {});
           };
@@ -191,10 +189,14 @@ export function useZorveusAuth(): UseZorveusAuthReturn {
         });
       } catch (err) {
         const authError = err instanceof Error ? err : new Error(String(err));
-        setError(authError);
+        if (isMountedRef.current) {
+          setError(authError);
+        }
         throw authError;
       } finally {
-        setIsLoading(false);
+        if (isMountedRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     [clientId, clientSecret, redirectUri, setOAuthSession, authBaseUrl]

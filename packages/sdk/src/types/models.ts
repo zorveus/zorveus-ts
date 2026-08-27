@@ -4,6 +4,9 @@ export interface Model {
   created: number;
   owned_by: string;
   provider?: string;
+  mode?: string;
+  max_input_tokens?: number;
+  max_output_tokens?: number;
   route_status?: "available" | "degraded" | "unavailable";
 }
 

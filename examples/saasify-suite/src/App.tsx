@@ -1033,11 +1033,14 @@ export default function App(): React.JSX.Element {
 
         if (isMounted) {
           if (res && Array.isArray(res.data) && res.data.length > 0) {
-            const formatted = res.data.map((m) => ({
-              id: m.id,
-              name: m.id,
-              provider: m.owned_by || m.id.split("/")[0] || "AI"
-            }));
+            const formatted = res.data.map((m) => {
+              const prefix = m.id.includes("/") ? m.id.split("/")[0] : null;
+              return {
+                id: m.id,
+                name: m.id,
+                provider: m.provider || prefix || m.owned_by || "AI"
+              };
+            });
             setAvailableModels(formatted);
             setSelectedModel((prev) => {
               if (prev && formatted.some((m) => m.id === prev)) return prev;
@@ -1611,7 +1614,7 @@ Provide:
                   >
                     {availableModels.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.provider ? `[${m.provider}] ` : ""}{m.name || m.id}
+                        {m.provider && !m.id.toLowerCase().startsWith(m.provider.toLowerCase() + "/") ? `[${m.provider}] ` : ""}{m.name || m.id}
                       </option>
                     ))}
                   </select>

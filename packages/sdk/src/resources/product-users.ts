@@ -160,11 +160,11 @@ export class ProductUsers {
     params: GrantCreditParams,
     options: RequestOptions = {}
   ): Promise<GrantProductUserCreditsResponse> {
-    assertDecimalString(params.amount, "grantCredit.amount");
+    const amount = assertDecimalString(params.amount, "grantCredit.amount");
 
     const payload = {
       app_id: params.appId,
-      amount: params.amount,
+      amount,
       currency: params.currency || "USD",
       reason: params.reason ?? null,
       expires_at: params.expiresAt ?? null,
@@ -192,14 +192,14 @@ export class ProductUsers {
     params: GrantCreditByExternalIdParams,
     options: RequestOptions = {}
   ): Promise<GrantProductUserCreditsResponse> {
-    assertDecimalString(params.amount, "grantCreditByExternalId.amount");
+    const amount = assertDecimalString(params.amount, "grantCreditByExternalId.amount");
 
     const payload = {
       app_id: params.appId,
       external_user_id: params.externalUserId,
       display_name: params.displayName ?? null,
       email: params.email ?? null,
-      amount: params.amount,
+      amount,
       currency: params.currency || "USD",
       source: params.source ?? null,
       reason: params.reason ?? null,

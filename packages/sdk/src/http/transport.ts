@@ -71,14 +71,19 @@ export class HTTPTransport {
     const maxRetries = isIdempotent ? (options.maxRetries ?? this.maxRetries) : 0;
     const timeoutMs = options.timeout ?? this.timeout;
 
+    if (options.signal?.aborted) {
+      throw new APIConnectionError("Request was cancelled by user");
+    }
+
     let attempt = 0;
 
     while (true) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const onAbort = () => controller.abort();
 
       if (options.signal) {
-        options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+        options.signal.addEventListener("abort", onAbort, { once: true });
       }
 
       try {
@@ -90,8 +95,6 @@ export class HTTPTransport {
           body: bodyContent,
           signal: controller.signal
         });
-
-        clearTimeout(timeoutId);
 
         if (options.stream) {
           if (!response.ok) {
@@ -127,8 +130,6 @@ export class HTTPTransport {
         const data = await this.parseResponseBody(response);
         return data as T;
       } catch (error) {
-        clearTimeout(timeoutId);
-
         if (error && typeof error === "object" && "status" in error) {
           throw error;
         }
@@ -151,6 +152,11 @@ export class HTTPTransport {
         }
 
         throw new APIConnectionError(errorMessage, { cause: error });
+      } finally {
+        clearTimeout(timeoutId);
+        if (options.signal) {
+          options.signal.removeEventListener("abort", onAbort);
+        }
       }
     }
   }
@@ -211,11 +217,19 @@ export class HTTPTransport {
       if (!isNaN(parsedSeconds) && parsedSeconds > 0) {
         return parsedSeconds * 1000;
       }
+      const parsedDate = Date.parse(retryAfterHeader);
+      if (!isNaN(parsedDate)) {
+        const diff = parsedDate - Date.now();
+        if (diff > 0) {
+          return diff;
+        }
+      }
     }
 
     const baseDelay = 500;
-    const exponential = Math.min(10000, baseDelay * Math.pow(2, attempt));
-    return Math.floor(Math.random() * exponential);
+    const maxBackoff = Math.min(10000, baseDelay * Math.pow(2, Math.max(0, attempt - 1)));
+    const jitter = Math.floor(Math.random() * maxBackoff);
+    return Math.max(baseDelay, jitter);
   }
 
   private sleep(ms: number): Promise<void> {

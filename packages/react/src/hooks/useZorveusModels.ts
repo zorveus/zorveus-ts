@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { AuthenticationError, type Model, type ModelListParams, type ZorveusError } from "@zorveus/sdk";
 import { useZorveusContext } from "../context/ZorveusContext";
 
@@ -22,35 +22,53 @@ export function useZorveusModels(options: UseZorveusModelsOptions = {}): UseZorv
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<ZorveusError | Error | null>(null);
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const fetchModels = useCallback(async () => {
     if (!client) {
-      setIsLoading(false);
-      setModels([]);
-      setError(
-        new AuthenticationError("Authentication required. Connect your AI wallet to load available models.", {
-          code: "unauthenticated"
-        })
-      );
+      if (isMountedRef.current) {
+        setIsLoading(false);
+        setModels([]);
+        setError(
+          new AuthenticationError("Authentication required. Connect your AI wallet to load available models.", {
+            code: "unauthenticated"
+          })
+        );
+      }
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
+    if (isMountedRef.current) {
+      setIsLoading(true);
+      setError(null);
+    }
 
     try {
       const params: ModelListParams = { routeStatus };
       const response = await client.models.list(params);
-      if (response && Array.isArray(response.data)) {
-        setModels(response.data);
-      } else {
-        setModels([]);
+      if (isMountedRef.current) {
+        if (response && Array.isArray(response.data)) {
+          setModels(response.data);
+        } else {
+          setModels([]);
+        }
       }
     } catch (err: unknown) {
-      const errorObj = err instanceof Error ? err : new Error(String(err));
-      setError(errorObj);
-      setModels([]);
+      if (isMountedRef.current) {
+        const errorObj = err instanceof Error ? err : new Error(String(err));
+        setError(errorObj);
+        setModels([]);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [client, routeStatus]);
 

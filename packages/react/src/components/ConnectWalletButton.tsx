@@ -199,6 +199,7 @@ export function ConnectWalletButton({
       style={defaultButtonStyle}
       onClick={handleClick}
       disabled={disabled || isLoading}
+      aria-busy={isLoading}
     >
       {renderLogoIcon()}
       <span className={labelClassName}>{labelContent}</span>

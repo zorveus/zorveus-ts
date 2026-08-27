@@ -15,6 +15,10 @@
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@zorveus/sdk": ["./packages/sdk/dist/index.d.ts"]
+    }
   }
 }

@@ -235,15 +235,20 @@ export function SpendCapIndicator(props: SpendCapIndicatorProps): React.JSX.Elem
         transition: "width 300ms ease, background-color 300ms ease"
       };
 
+  const valueText = isUncapped
+    ? `${renderData.currentFormatted} spent (${period}, uncapped)`
+    : `${renderData.currentFormatted} of ${renderData.limitFormatted} spent (${percentage.toFixed(0)}%)`;
+
   return (
     <div
       className={props.className}
       style={containerStyle}
       role="progressbar"
-      aria-valuenow={percentage}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-label={`Spending Cap (${period}): ${percentage.toFixed(1)}% spent`}
+      aria-valuenow={isUncapped ? undefined : Number(percentage.toFixed(0))}
+      aria-valuemin={isUncapped ? undefined : 0}
+      aria-valuemax={isUncapped ? undefined : 100}
+      aria-valuetext={valueText}
+      aria-label={`Spending Cap (${period})`}
     >
       {showDetails && (
         <div className={props.headerClassName} style={headerStyle}>
