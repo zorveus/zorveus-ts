@@ -1,22 +1,18 @@
-# @zorveus/react
+# `@zorveus/react`
 
-Official React hooks, Context Providers, and UI components for the [Zorveus](https://zorveus.com) AI Infrastructure Platform.
+Official React hooks, Context Provider, and UI components for the [Zorveus](https://zorveus.com) AI platform.
 
-Enables 1-click user AI wallet connection, streaming inference, live model selection, and real-time spend limit tracking in React 18+ and Next.js applications.
+Provides user AI wallet connection, streaming inference, model selection, and spend limit tracking in React 18+ and Next.js applications.
 
----
-
-## 🚀 Installation
+## Installation
 
 ```bash
 npm install @zorveus/react @zorveus/sdk
 ```
 
----
+## Quickstart
 
-## ⚡ Quickstart
-
-### 1. Setup `<ZorveusProvider>` & `<OAuthCallbackHandler>`
+### Setup `<ZorveusProvider>` and `<OAuthCallbackHandler>`
 
 Wrap your application with `<ZorveusProvider>` at the root, and include `<OAuthCallbackHandler />` to process popup redirect events:
 
@@ -29,9 +25,8 @@ export function App({ children }: { children: React.ReactNode }) {
     <ZorveusProvider
       clientId="zrv_client_92294673f5284df3899b7eaaf43ecd82"
       redirectUri="http://localhost:5173/oauth/callback"
-      persistToken={true} // Automatically persists connection across browser refreshes
+      persistToken={true}
     >
-      {/* Zero-UI listener that receives popup auth tokens */}
       <OAuthCallbackHandler />
       {children}
     </ZorveusProvider>
@@ -39,9 +34,7 @@ export function App({ children }: { children: React.ReactNode }) {
 }
 ```
 
----
-
-### 2. Connect AI Wallet, Select Model & Stream Inference
+### Connect AI wallet, select model, and stream inference
 
 ```tsx
 import React from "react";
@@ -56,14 +49,9 @@ import {
 
 export function AIStudio() {
   const { isConnected, error: authError } = useZorveusAuth();
-  
-  // Live foundation models discovery (only queries when connected)
   const { models, isLoading: modelsLoading } = useZorveusModels({ routeStatus: "available" });
-  
-  // Live spend cap & usage tracking
-  const { usage, isLoading: spendLoading } = useZorveusSpend();
+  const { usage } = useZorveusSpend();
 
-  // Streaming AI inference
   const { messages, submitPrompt, isStreaming, stopStreaming } = useZorveusInference({
     model: "openai/gpt-4.1-mini",
     systemPrompt: "You are an expert AI assistant."
@@ -71,14 +59,12 @@ export function AIStudio() {
 
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: 24 }}>
-      {/* 1-Click Google Sign-In Styled AI Wallet Button */}
       <ConnectWalletButton />
 
-      {authError && <p style={{ color: "red" }}>Auth Error: {authError.message}</p>}
+      {authError && <p style={{ color: "red" }}>Auth error: {authError.message}</p>}
 
       {isConnected && (
         <div style={{ marginTop: 24 }}>
-          {/* Visual Budget Cap Indicator */}
           {usage && (
             <SpendCapIndicator
               current={parseFloat(usage.spent_this_period)}
@@ -87,7 +73,6 @@ export function AIStudio() {
             />
           )}
 
-          {/* Model Selector */}
           <div style={{ margin: "16px 0" }}>
             <label>Model: </label>
             <select disabled={modelsLoading}>
@@ -99,7 +84,6 @@ export function AIStudio() {
             </select>
           </div>
 
-          {/* Submit Action */}
           <button 
             onClick={() => submitPrompt("Explain quantum computing simply.")}
             disabled={isStreaming}
@@ -113,7 +97,6 @@ export function AIStudio() {
             </button>
           )}
 
-          {/* Live Message Output */}
           <div style={{ marginTop: 16 }}>
             {messages.map((m, i) => (
               <div key={i} style={{ marginBottom: 8 }}>
@@ -128,48 +111,42 @@ export function AIStudio() {
 }
 ```
 
----
-
-## 🧩 Component & Hook Reference
+## Components and hooks reference
 
 ### Components
 
 | Export | Type | Description |
 | :--- | :--- | :--- |
 | `<ZorveusProvider>` | Provider | Root Context Provider managing auth state, client lifecycle, and token storage |
-| `<ConnectWalletButton>` | Component | Responsive Google Sign-In style button with PKCE popup workflow & Zorveus branding |
-| `<OAuthCallbackHandler>` | Component | Zero-UI listener component that processes OAuth popup redirects |
-| `<SpendCapIndicator>` | Component | Progress bar with threshold color changes (Green $\rightarrow$ Amber $\rightarrow$ Red) |
+| `<ConnectWalletButton>` | Component | Button component with PKCE popup workflow and Zorveus branding |
+| `<OAuthCallbackHandler>` | Component | Handler component that processes OAuth popup redirects |
+| `<SpendCapIndicator>` | Component | Progress bar indicator with status color transitions |
 
 ### Hooks
 
-| Hook | Return Value | Description |
+| Hook | Return value | Description |
 | :--- | :--- | :--- |
 | `useZorveusAuth()` | `{ isConnected, accessToken, error, connect, disconnect, connectionId }` | Accesses connection state and triggers OAuth PKCE connect/disconnect flows |
 | `useZorveusInference(options)` | `{ messages, isStreaming, submitPrompt, stopStreaming, clearMessages, error }` | Manages streaming inference, token accumulation, and message history |
-| `useZorveusModels(options)` | `{ models, isLoading, error, refetch }` | Queries accessible models (`GET /v1/models?route_status=available`) with auto-caching |
+| `useZorveusModels(options)` | `{ models, isLoading, error, refetch }` | Queries accessible models (`GET /v1/models?route_status=available`) |
 | `useZorveusSpend(options)` | `{ usage, isLoading, error, refetch }` | Queries live spending, budget caps, and balances (`GET /inference-keys/usage`) |
-| `useZorveusContext()` | `{ client, isConnected, accessToken, ... }` | Direct access to the raw Zorveus context and initialized `@zorveus/sdk` `client` |
+| `useZorveusContext()` | `{ client, isConnected, accessToken, ... }` | Direct access to the raw Zorveus context and initialized `@zorveus/sdk` client |
 
----
-
-## ⚙️ Provider Configuration
+## Provider configuration options
 
 ```tsx
 <ZorveusProvider
   clientId="your_oauth_client_id"
   redirectUri="http://localhost:5173/oauth/callback"
-  persistToken={true}                        // Store access token in browser session
-  baseURL="https://api.zorveus.com"          // Optional: Control plane API URL
-  gatewayBaseURL="https://api.zorveus.com/v1" // Optional: AI Gateway URL
-  scopes={["inference:write", "models:*"]}  // Optional: Requested OAuth scopes
+  persistToken={true}
+  baseURL="https://api.zorveus.com"
+  gatewayBaseURL="https://api.zorveus.com/v1"
+  scopes={["inference:write", "models:*"]}
 >
   <App />
 </ZorveusProvider>
 ```
 
----
-
-## 📄 License
+## License
 
 MIT © [Zorveus Inc.](https://zorveus.com)

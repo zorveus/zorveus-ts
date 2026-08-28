@@ -1,49 +1,45 @@
-# Zorveus TypeScript & React SDK Monorepo
+# Zorveus TypeScript and React SDK monorepo
 
-The official TypeScript and React client SDKs for the [Zorveus](https://zorveus.com) AI Infrastructure Platform.
+Official TypeScript and React client libraries for the [Zorveus](https://zorveus.com) AI platform.
 
----
+## Monorepo packages
 
-## 📦 Monorepo Packages
-
-| Package | Version | Description | Target Environment |
+| Package | Version | Description | Target environment |
 | :--- | :--- | :--- | :--- |
-| [`@zorveus/sdk`](./packages/sdk) | `0.1.0` | Core TypeScript/JavaScript client for AI Gateway, Product Users, Credit Grants, and OAuth PKCE | Node.js, Next.js, Edge, Browser |
-| [`@zorveus/react`](./packages/react) | `0.1.0` | React hooks, Context Providers, and UI components (`ConnectWalletButton`, `SpendCapIndicator`) | React 18+, Next.js (Client) |
+| [`@zorveus/sdk`](./packages/sdk) | `0.1.7` | TypeScript client for AI Gateway, Product Users, Credit Grants, and OAuth PKCE | Node.js, Next.js, Edge, Browser |
+| [`@zorveus/react`](./packages/react) | `0.1.7` | React hooks, Context Provider, and UI components (`ConnectWalletButton`, `SpendCapIndicator`) | React 18+, Next.js (Client) |
 
----
+## Reference applications
 
-## 🚀 Reference Applications
-
-| Application | Path | Tech Stack | Highlights |
+| Application | Path | Tech stack | Details |
 | :--- | :--- | :--- | :--- |
-| **ResumeCraft AI** | [`examples/saasify-suite`](./examples/saasify-suite) | React, Vite, TS | Startup Control Plane: candidate directory, tier keys, external ID credit grants, streaming career tools |
-| **MindSpire Studio** | [`examples/mindspire-studio`](./examples/mindspire-studio) | React, Vite, TS | 1-Click User AI Wallet OAuth PKCE connect, BYO billing, live model discovery, and streaming |
-| **Node.js Automation Scripts** | [`examples/node-scripts`](./examples/node-scripts) | Node.js, TS | Stand-alone CLI scripts for inference streaming, user provisioning, and credit grants |
+| **ResumeCraft AI** | [`examples/saasify-suite`](./examples/saasify-suite) | React, Vite, TS | Product user directory, tier keys, credit grants, streaming AI tools |
+| **MindSpire Studio** | [`examples/mindspire-studio`](./examples/mindspire-studio) | React, Vite, TS | User AI Wallet connection via OAuth PKCE, model selection, streaming |
+| **Node.js scripts** | [`examples/node-scripts`](./examples/node-scripts) | Node.js, TS | Standalone CLI scripts for inference streaming, user provisioning, and credit grants |
 
----
+## Quickstart for backend and full-stack (`@zorveus/sdk`)
 
-## ⚡ Quickstart: Backend / Full-Stack (`@zorveus/sdk`)
+Install the SDK:
 
 ```bash
 npm install @zorveus/sdk
 ```
 
-### 1. Master Organization Control Plane (`ZorveusServiceClient`)
+### Organization management (`ZorveusServiceClient`)
 
-Anchor all product user operations to your SaaS user identifiers (`external_user_id`):
+Anchor product user operations to your SaaS user identifiers (`externalUserId`):
 
 ```typescript
 import { ZorveusServiceClient } from "@zorveus/sdk";
 
 const zorveus = new ZorveusServiceClient({
-  apiKey: process.env.ZORVEUS_SERVICE_KEY // zrv_svc_...
+  apiKey: process.env.ZORVEUS_SERVICE_KEY
 });
 
 const appId = "app_startup_123";
 const externalUserId = "usr_sara_101";
 
-// 1. Auto-provision candidate profile
+// Create or update user profile
 const user = await zorveus.productUsers.createOrUpdate({
   appId,
   externalUserId,
@@ -51,7 +47,7 @@ const user = await zorveus.productUsers.createOrUpdate({
   email: "sara@example.com"
 });
 
-// 2. Issue promotional AI credits
+// Issue promotional AI credits
 await zorveus.productUsers.grantCreditByExternalId({
   appId,
   externalUserId,
@@ -60,14 +56,14 @@ await zorveus.productUsers.grantCreditByExternalId({
   reason: "Welcome Bonus"
 });
 
-// 3. Query user credit grants ledger
+// Query user credit grants ledger
 const ledger = await zorveus.productUsers.listCreditGrantsByExternalId({
   appId,
   externalUserId
 });
 ```
 
-### 2. High-Speed Inference Client (`Zorveus`)
+### AI inference client (`Zorveus`)
 
 ```typescript
 import { Zorveus } from "@zorveus/sdk";
@@ -79,7 +75,7 @@ const client = new Zorveus({
 // Stream completions with user attribution
 const stream = await client.chat.completions.create({
   model: "openai/gpt-4.1-mini",
-  messages: [{ role: "user", content: "Write a high-converting headline." }],
+  messages: [{ role: "user", content: "Write a headline for a coffee shop." }],
   stream: true,
   zorveusMetadata: { externalUserId: "usr_sara_101" }
 });
@@ -89,13 +85,15 @@ for await (const chunk of stream) {
 }
 ```
 
----
+## Quickstart for React (`@zorveus/react`)
 
-## ⚡ Quickstart: Frontend / React (`@zorveus/react`)
+Install React package:
 
 ```bash
 npm install @zorveus/react @zorveus/sdk
 ```
+
+Wrap your application tree in `<ZorveusProvider>`:
 
 ```tsx
 import React from "react";
@@ -105,8 +103,7 @@ import {
   ConnectWalletButton,
   useZorveusAuth,
   useZorveusInference,
-  useZorveusModels,
-  SpendCapIndicator
+  useZorveusModels
 } from "@zorveus/react";
 
 export function App() {
@@ -147,32 +144,15 @@ function Studio() {
 }
 ```
 
----
-
-## 🛠️ Monorepo Development
+## Local development
 
 ```bash
-# Install dependencies
 npm install
-
-# Run typecheck across all workspaces
 npm run typecheck
-
-# Run test suite across all packages (Vitest)
 npm test
-
-# Build all packages and applications
 npm run build
-
-# Launch ResumeCraft AI Demo
-npm run demo:saasify
-
-# Launch MindSpire Studio Demo
-npm run demo:mindspire
 ```
 
----
-
-## 📄 License
+## License
 
 MIT © [Zorveus Inc.](https://zorveus.com)
