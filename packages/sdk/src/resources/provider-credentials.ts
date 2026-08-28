@@ -18,7 +18,7 @@ export class ProviderCredentials {
   }
 
   /**
-   * Registers an organization BYOK provider credential via Service Key (`POST /provider-credentials/org-programmatic`).
+   * Registers an organization BYOK provider credential via Service Key (`POST /provider-credentials`).
    */
   async create(
     params: CreateProviderCredentialParams,
@@ -38,7 +38,7 @@ export class ProviderCredentials {
     const query = params.orgId ? { org_id: params.orgId } : undefined;
 
     return this.transport.request<ProviderCredentialResponse>(
-      "/provider-credentials/org-programmatic",
+      "/provider-credentials",
       {
         method: "POST",
         body: payload,
@@ -49,7 +49,7 @@ export class ProviderCredentials {
   }
 
   /**
-   * Lists BYOK provider credentials for an organization (`GET /provider-credentials/org-programmatic`).
+   * Lists BYOK provider credentials for an organization (`GET /provider-credentials`).
    */
   async list(
     params: ListProviderCredentialsParams = {},
@@ -60,7 +60,7 @@ export class ProviderCredentials {
     if (params.status) query.status = params.status;
 
     return this.transport.request<ProviderCredentialListResponse>(
-      "/provider-credentials/org-programmatic",
+      "/provider-credentials",
       {
         method: "GET",
         query,
@@ -70,7 +70,7 @@ export class ProviderCredentials {
   }
 
   /**
-   * Rotates a provider credential secret (`POST /provider-credentials/org-programmatic/{id}/rotate`).
+   * Rotates a provider credential secret (`POST /provider-credentials/{id}/rotate`).
    */
   async rotate(
     providerCredentialId: string,
@@ -85,7 +85,7 @@ export class ProviderCredentials {
     const query = params.orgId ? { org_id: params.orgId } : undefined;
 
     return this.transport.request<RotateProviderCredentialResponse>(
-      `/provider-credentials/org-programmatic/${encodeURIComponent(providerCredentialId)}/rotate`,
+      `/provider-credentials/${encodeURIComponent(providerCredentialId)}/rotate`,
       {
         method: "POST",
         body: payload,
@@ -96,14 +96,14 @@ export class ProviderCredentials {
   }
 
   /**
-   * Deletes a provider credential (`DELETE /provider-credentials/org-programmatic/{id}`).
+   * Deletes a provider credential (`DELETE /provider-credentials/{id}`).
    */
   async delete(
     providerCredentialId: string,
     options: RequestOptions = {}
   ): Promise<void> {
     return this.transport.request<void>(
-      `/provider-credentials/org-programmatic/${encodeURIComponent(providerCredentialId)}`,
+      `/provider-credentials/${encodeURIComponent(providerCredentialId)}`,
       {
         method: "DELETE",
         ...options
