@@ -5,7 +5,17 @@
  * npm run demo:node
  */
 
+import fs from "fs";
+import path from "path";
 import { Zorveus } from "../../packages/sdk/src/index";
+
+// Auto-load examples/node-scripts/.env if present
+const envPath = path.resolve(__dirname, ".env");
+if (fs.existsSync(envPath) && typeof (process as any).loadEnvFile === "function") {
+  try {
+    (process as any).loadEnvFile(envPath);
+  } catch {}
+}
 
 async function main() {
   const apiKey = process.env.ZORVEUS_INFERENCE_KEY || "zrv_live_demo_key_12345";
