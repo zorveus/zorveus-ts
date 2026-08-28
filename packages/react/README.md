@@ -147,6 +147,9 @@ export function AIStudio() {
 </ZorveusProvider>
 ```
 
+> [!NOTE]
+> Ensure `scopes` includes at least one model scope such as `models:*`. Omitting model scopes triggers a `zorveus_model_scope_required` authorization error.
+
 ## License
 
 MIT © [Zorveus Inc.](https://zorveus.com)

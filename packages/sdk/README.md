@@ -152,6 +152,9 @@ console.log("User access token:", tokenData.access_token);
 console.log("App connection ID:", tokenData.app_connection_id);
 ```
 
+> [!NOTE]
+> OAuth authorization requests require at least one model scope such as `models:*` alongside `inference:write`. Omitting model scopes triggers a `zorveus_model_scope_required` authorization error.
+
 ## API reference
 
 ### `Zorveus` (Inference client)

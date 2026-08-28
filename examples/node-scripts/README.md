@@ -1,45 +1,46 @@
-# Zorveus Node.js Standalone Automation Scripts
+# Zorveus Node.js automation scripts
 
-A collection of standalone, ready-to-run TypeScript automation scripts demonstrating `@zorveus/sdk` in Node.js backend environments.
+Standalone TypeScript scripts demonstrating `@zorveus/sdk` in Node.js backend environments.
 
----
+## Included scripts
 
-## 📁 Included Scripts
+1. **`inference-demo.ts`**: Non-streaming and streaming chat completions across foundation models.
+2. **`management-demo.ts`**: Product user provisioning, profile inspection, credit grants, and ledger queries.
+3. **`oauth-pkce-demo.ts`**: OAuth 2.0 PKCE authorization URL generation, state validation, and token exchange.
 
-1. **`basic-inference.ts`**: Non-streaming and streaming chat completions across foundation models.
-2. **`user-management.ts`**: Product user provisioning (`PUT /product-users/by-external-id`), profile inspection, and credit summary.
-3. **`grant-credits.ts`**: Promotional credit issuance anchored to external user ID (`POST /product-users/by-external-id/credit-grants`) and ledger inspection (`GET /product-users/by-external-id/credit-grants`).
-4. **`oauth-pkce-flow.ts`**: Complete OAuth 2.0 PKCE URL generation and token exchange simulation.
+## How to run
 
----
+### Option 1: Run via root npm scripts
 
-## 🚀 Running the Scripts
+From the monorepo root:
 
-### 1. Configure Environment Variables
-Set your keys in your shell or `.env`:
 ```bash
-export ZORVEUS_INFERENCE_KEY="zrv_..."
+# Run AI inference demo
+npm run demo:node
+
+# Run product user and credit management demo
+npm run demo:management
+
+# Run OAuth PKCE demo
+npm run demo:oauth
+```
+
+### Option 2: Run directly with custom environment variables
+
+Set your keys before running:
+
+```bash
+export ZORVEUS_INFERENCE_KEY="zrv_live_..."
 export ZORVEUS_SERVICE_KEY="zrv_svc_..."
-export ZORVEUS_APP_ID="app_..."
+
+npx tsx examples/node-scripts/inference-demo.ts
+npx tsx examples/node-scripts/management-demo.ts
+npx tsx examples/node-scripts/oauth-pkce-demo.ts
 ```
 
-### 2. Execute with `tsx`
-```bash
-# Test AI inference streaming
-npx tsx src/basic-inference.ts
+> [!NOTE]
+> `oauth-pkce-demo.ts` passes `scopes: ["inference:write", "models:*"]`. The Zorveus OAuth consent backend requires at least one model scope (`models:*`) to grant user inference authorization.
 
-# Test product user provisioning
-npx tsx src/user-management.ts
-
-# Test issuing AI credits via external ID
-npx tsx src/grant-credits.ts
-
-# Test OAuth PKCE generator
-npx tsx src/oauth-pkce-flow.ts
-```
-
----
-
-## 📄 License
+## License
 
 MIT © [Zorveus Inc.](https://zorveus.com)
