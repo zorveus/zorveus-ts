@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { ZorveusOAuth } from "@zorveus/sdk";
+import { ZorveusOAuth, type OAuthTokenResponse } from "@zorveus/sdk";
 import { useZorveusContext } from "../context/ZorveusContext";
 
 export interface UseZorveusAuthReturn {
@@ -134,12 +134,12 @@ export function useZorveusAuth(): UseZorveusAuthReturn {
               redirectUri,
               baseURL: authBaseUrl
             })
-              .then((tokenRes) => {
+              .then((tokenRes: OAuthTokenResponse) => {
                 if (popup && !popup.closed) popup.close();
                 setOAuthSession(tokenRes);
                 resolve();
               })
-              .catch((err) => {
+              .catch((err: unknown) => {
                 if (popup && !popup.closed) popup.close();
                 reject(err);
               });

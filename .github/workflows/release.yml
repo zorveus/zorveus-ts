@@ -28,13 +28,13 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Build Distributables
+        run: npm run build
+
       - name: Run Typecheck and Tests
         run: |
           npm run typecheck
           npm run test
-
-      - name: Build Distributables
-        run: npm run build
 
       - name: Publish Packages via npm Trusted Publishing (OIDC)
         run: |

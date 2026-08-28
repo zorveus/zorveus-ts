@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Zorveus,
   ZorveusServiceClient,
+  type Model,
   type ProductUserResponse,
   type ProductUserCreditGrantResponse
 } from "@zorveus/sdk";
@@ -1033,7 +1034,7 @@ export default function App(): React.JSX.Element {
 
         if (isMounted) {
           if (res && Array.isArray(res.data) && res.data.length > 0) {
-            const formatted = res.data.map((m) => {
+            const formatted = res.data.map((m: Model) => {
               const prefix = m.id.includes("/") ? m.id.split("/")[0] : null;
               return {
                 id: m.id,
@@ -1043,7 +1044,7 @@ export default function App(): React.JSX.Element {
             });
             setAvailableModels(formatted);
             setSelectedModel((prev) => {
-              if (prev && formatted.some((m) => m.id === prev)) return prev;
+              if (prev && formatted.some((m: { id: string }) => m.id === prev)) return prev;
               return formatted[0].id;
             });
             setModelsError(null);

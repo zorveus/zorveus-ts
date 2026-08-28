@@ -33,6 +33,7 @@ release:
 	fi
 	@echo "Updating package versions to $(VERSION)..."
 	@npm pkg set version=$(VERSION) --workspace=@zorveus/sdk --workspace=@zorveus/react
+	@npm run build
 	@npm run typecheck
 	@npm run test
 	@git add packages/sdk/package.json packages/react/package.json
