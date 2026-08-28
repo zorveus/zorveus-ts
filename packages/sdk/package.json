@@ -1,6 +1,6 @@
 {
   "name": "@zorveus/sdk",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Official TypeScript/JavaScript SDK for Zorveus AI Gateway and Management API",
   "repository": {
     "type": "git",
