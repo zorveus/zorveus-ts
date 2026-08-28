@@ -81,8 +81,12 @@ async function main() {
       routingPriority: 100
     });
     console.log(`✓ Provider Credential Registered: ID=${cred.provider_credential_id}, Provider=${cred.provider}`);
-  } catch (error) {
-    console.log(`[Demo Notice] Server Request: ${(error as Error).message}`);
+  } catch (error: any) {
+    if (error.code === "zorveus_invalid_provider_credential") {
+      console.log("ℹ Note: Provider credential payload validated by Zorveus backend (rejected mock API key as expected).");
+    } else {
+      console.log(`[Demo Notice] Server Request: ${error.message || error}`);
+    }
   }
 
   console.log("\n==================================================");

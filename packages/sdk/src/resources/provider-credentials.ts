@@ -27,6 +27,7 @@ export class ProviderCredentials {
     const payload = {
       provider: params.provider,
       credential_name: params.credentialName,
+      secret: params.apiKey,
       api_key: params.apiKey,
       secret_kind: params.secretKind || "api_key",
       model_policies: params.modelPolicies || [],
@@ -38,7 +39,7 @@ export class ProviderCredentials {
     const query = params.orgId ? { org_id: params.orgId } : undefined;
 
     return this.transport.request<ProviderCredentialResponse>(
-      "/provider-credentials",
+      "/provider-credentials/org-programmatic",
       {
         method: "POST",
         body: payload,
