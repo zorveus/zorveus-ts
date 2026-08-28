@@ -1,6 +1,6 @@
 {
   "name": "@zorveus/react",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "React Context, Hooks, and UI Components for Zorveus AI Wallet & Gateway Integration",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
