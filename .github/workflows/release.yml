@@ -10,7 +10,6 @@ jobs:
   publish:
     name: Build & Publish to npm
     runs-on: ubuntu-latest
-    environment: npm
     permissions:
       id-token: write
       contents: read
