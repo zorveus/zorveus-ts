@@ -1,0 +1,42 @@
+name: Release Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Build & Publish to npm
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Typecheck and Tests
+        run: |
+          npm run typecheck
+          npm run test
+
+      - name: Build Distributables
+        run: npm run build
+
+      - name: Publish Packages via npm Trusted Publishing (OIDC)
+        run: |
+          npm publish --workspace=@zorveus/sdk --access public --provenance
+          npm publish --workspace=@zorveus/react --access public --provenance
