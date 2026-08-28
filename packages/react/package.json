@@ -1,7 +1,12 @@
 {
   "name": "@zorveus/react",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "React Context, Hooks, and UI Components for Zorveus AI Wallet & Gateway Integration",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zorveus/zorveus-ts",
+    "directory": "packages/react"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

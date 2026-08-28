@@ -1,7 +1,12 @@
 {
   "name": "@zorveus/sdk",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Official TypeScript/JavaScript SDK for Zorveus AI Gateway and Management API",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zorveus/zorveus-ts",
+    "directory": "packages/sdk"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
