@@ -16,7 +16,8 @@
     "demo:oauth": "npx tsx examples/node-scripts/oauth-pkce-demo.ts",
     "demo:mindspire": "npm run --workspace=@zorveus/mindspire-studio dev",
     "demo:saasify": "npm run --workspace=@zorveus/saasify-suite dev",
-    "demo:react": "npm run demo:mindspire"
+    "demo:react": "npm run demo:mindspire",
+    "publish:packages": "npm run build && npm publish --workspace=@zorveus/sdk --access public && npm publish --workspace=@zorveus/react --access public"
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",
