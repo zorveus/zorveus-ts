@@ -1,6 +1,6 @@
 {
   "name": "@zorveus/sdk",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Official TypeScript/JavaScript SDK for Zorveus AI Gateway and Management API",
   "repository": {
     "type": "git",
@@ -43,8 +43,8 @@
     }
   },
   "peerDependencies": {
-    "openai": "^4.0.0",
-    "@ai-sdk/openai": "^0.0.0 || ^1.0.0"
+    "@ai-sdk/openai": "^0.0.0 || ^1.0.0",
+    "openai": "^4.0.0"
   },
   "peerDependenciesMeta": {
     "openai": {
