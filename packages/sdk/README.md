@@ -58,8 +58,46 @@ for await (const chunk of stream) {
 
 // Query current usage and spend cap
 const usage = await client.getUsage();
-console.log(`Spent this period: $${usage.spent_this_period} / $${usage.spend_cap} ${usage.currency}`);
-console.log(`Remaining balance: $${usage.remaining_balance}`);
+console.log(`Period spend: $${usage.period_spend_usd}, remaining balance: $${usage.remaining_allowance_usd}`);
+```
+
+## Adapters for OpenAI SDK and Vercel AI SDK
+
+### OpenAI SDK integration (`ZorveusOpenAI`)
+
+If your codebase uses the official `openai` npm package, import `ZorveusOpenAI` from `@zorveus/sdk/openai`. It wraps `OpenAI` and automatically injects `metadata.external_user_id` into request payloads:
+
+```typescript
+import { ZorveusOpenAI } from "@zorveus/sdk/openai";
+
+const openai = new ZorveusOpenAI({
+  apiKey: process.env.ZORVEUS_INFERENCE_KEY,
+  externalUserId: "usr_sara_101"
+});
+
+const completion = await openai.chat.completions.create({
+  model: "openai/gpt-4.1-mini",
+  messages: [{ role: "user", content: "Hello from Zorveus!" }]
+});
+```
+
+### Vercel AI SDK integration (`createZorveus`)
+
+If your project uses Vercel AI SDK (`ai` and `@ai-sdk/openai`), import `createZorveus` from `@zorveus/sdk/vercel`:
+
+```typescript
+import { createZorveus } from "@zorveus/sdk/vercel";
+import { streamText } from "ai";
+
+const zorveus = createZorveus({
+  apiKey: process.env.ZORVEUS_INFERENCE_KEY,
+  externalUserId: "usr_sara_101"
+});
+
+const { textStream } = streamText({
+  model: zorveus("openai/gpt-4.1-mini"),
+  prompt: "Generate 3 headline ideas."
+});
 ```
 
 ## Quickstart for product users and credit grants (`ZorveusServiceClient`)
