@@ -7,3 +7,4 @@ dist/
 openapi.json
 **/openapi.json
 public_documentation/
+docs/
