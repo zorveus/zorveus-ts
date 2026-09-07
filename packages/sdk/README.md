@@ -58,7 +58,7 @@ for await (const chunk of stream) {
 
 // Query current usage and spend cap
 const usage = await client.getUsage();
-console.log(`Period spend: $${usage.period_spend_usd}, remaining balance: $${usage.remaining_allowance_usd}`);
+console.log(`Period spend: $${usage.spent_this_period}, remaining balance: $${usage.remaining_balance}`);
 ```
 
 ## Adapters for OpenAI SDK and Vercel AI SDK
@@ -137,7 +137,7 @@ const grantRes = await zorveus.productUsers.grantCreditByExternalId({
 });
 
 console.log("Issued Grant ID:", grantRes.credit_grant.credit_grant_id);
-console.log("New Balance:", grantRes.credit_summary.remaining_balance);
+console.log("New Available Credits:", grantRes.credit_summary.available_credits);
 
 // Query user credit grants ledger
 const ledger = await zorveus.productUsers.listCreditGrantsByExternalId({
@@ -236,25 +236,39 @@ console.log("App connection ID:", tokenData.app_connection_id);
 
 ## Error handling
 
-The SDK exposes error classes for error handling:
+The SDK exposes typed error classes matching the Zorveus finance and gateway contract:
 
 ```typescript
-import { ZorveusError, AuthenticationError, RateLimitError, InvalidDecimalError } from "@zorveus/sdk";
+import {
+  ZorveusError,
+  ProductUserAllowanceInsufficientError,
+  CapExceededError,
+  InsufficientFundsError,
+  RateLimitError
+} from "@zorveus/sdk";
 
 try {
-  await zorveus.productUsers.grantCreditByExternalId({ ... });
+  await client.chat.completions.create({ ... });
 } catch (error) {
-  if (error instanceof InvalidDecimalError) {
-    console.error("Amount must be a valid decimal string (e.g. '25.00')");
-  } else if (error instanceof AuthenticationError) {
-    console.error("Invalid API Key or Service Key");
+  if (error instanceof ProductUserAllowanceInsufficientError) {
+    // HTTP 403: Base allowance and promotional credits exhausted
+    console.error("Allowance shortfall:", error.params?.shortfall);
+    console.error("Remaining base:", error.params?.remaining_base_allowance);
+    console.error("Promotional credits:", error.params?.promotional_credit_balance);
+  } else if (error instanceof CapExceededError) {
+    // HTTP 403: Key or member cap reached
+    console.error("Key cap reached:", error.message);
+  } else if (error instanceof InsufficientFundsError) {
+    // HTTP 402: Organization wallet lacks funds for wallet charge or BYOK fee
+    console.error("Organization wallet empty, top-up required:", error.message);
   } else if (error instanceof RateLimitError) {
-    console.error("Rate limit exceeded");
+    console.error("Rate limit exceeded:", error.message);
   } else if (error instanceof ZorveusError) {
     console.error(`Zorveus Error (${error.status}):`, error.message);
   }
 }
 ```
+
 
 ## License
 

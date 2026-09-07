@@ -61,7 +61,7 @@ export class ProviderCredentials {
     if (params.status) query.status = params.status;
 
     return this.transport.request<ProviderCredentialListResponse>(
-      "/provider-credentials",
+      "/provider-credentials/org-programmatic",
       {
         method: "GET",
         query,
@@ -71,7 +71,7 @@ export class ProviderCredentials {
   }
 
   /**
-   * Rotates a provider credential secret (`POST /provider-credentials/{id}/rotate`).
+   * Rotates a provider credential secret (`POST /provider-credentials/org-programmatic/{id}/rotate`).
    */
   async rotate(
     providerCredentialId: string,
@@ -86,7 +86,7 @@ export class ProviderCredentials {
     const query = params.orgId ? { org_id: params.orgId } : undefined;
 
     return this.transport.request<RotateProviderCredentialResponse>(
-      `/provider-credentials/${encodeURIComponent(providerCredentialId)}/rotate`,
+      `/provider-credentials/org-programmatic/${encodeURIComponent(providerCredentialId)}/rotate`,
       {
         method: "POST",
         body: payload,
@@ -97,14 +97,14 @@ export class ProviderCredentials {
   }
 
   /**
-   * Deletes a provider credential (`DELETE /provider-credentials/{id}`).
+   * Deletes a provider credential (`DELETE /provider-credentials/org-programmatic/{id}`).
    */
   async delete(
     providerCredentialId: string,
     options: RequestOptions = {}
   ): Promise<void> {
     return this.transport.request<void>(
-      `/provider-credentials/${encodeURIComponent(providerCredentialId)}`,
+      `/provider-credentials/org-programmatic/${encodeURIComponent(providerCredentialId)}`,
       {
         method: "DELETE",
         ...options

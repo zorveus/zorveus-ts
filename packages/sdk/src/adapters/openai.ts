@@ -1,9 +1,11 @@
 import OpenAI from "openai";
+export { parseZorveusGatewayError } from "../errors/zorveus-error";
 
 export interface ZorveusOpenAIOptions {
   apiKey?: string;
   baseURL?: string;
   externalUserId?: string;
+  productEndUserId?: string;
   displayName?: string;
   userEmail?: string;
   email?: string;
@@ -16,10 +18,11 @@ export interface ZorveusOpenAIOptions {
 
 /**
  * ZorveusOpenAI wraps the official OpenAI SDK client, automatically injecting
- * metadata (external_user_id and product_user attribution) into request payloads.
+ * metadata (external_user_id, product_end_user_id, and product_user attribution) into request payloads.
  */
 export class ZorveusOpenAI extends OpenAI {
   private readonly defaultExternalUserId?: string;
+  private readonly defaultProductEndUserId?: string;
   private readonly defaultDisplayName?: string;
   private readonly defaultUserEmail?: string;
   private readonly defaultUserMetadata?: Record<string, unknown>;
@@ -34,6 +37,7 @@ export class ZorveusOpenAI extends OpenAI {
 
     const {
       externalUserId,
+      productEndUserId,
       displayName,
       userEmail,
       email,
@@ -53,6 +57,7 @@ export class ZorveusOpenAI extends OpenAI {
     });
 
     this.defaultExternalUserId = externalUserId;
+    this.defaultProductEndUserId = productEndUserId;
     this.defaultDisplayName = displayName;
     this.defaultUserEmail = userEmail || email;
     this.defaultUserMetadata = userMetadata;
@@ -60,7 +65,11 @@ export class ZorveusOpenAI extends OpenAI {
     this.defaultMetadata = metadata;
 
     const buildMetadata = (body: any) => {
-      const extId = body?.external_user_id ?? this.defaultExternalUserId;
+      const extId = body?.user ?? body?.external_user_id ?? this.defaultExternalUserId;
+      const prodUserId =
+        body?.product_end_user_id ??
+        body?.metadata?.product_end_user_id ??
+        this.defaultProductEndUserId;
       const dName = body?.display_name ?? this.defaultDisplayName;
       const uEmail = body?.user_email ?? body?.email ?? this.defaultUserEmail;
       const uMeta = body?.user_metadata ?? this.defaultUserMetadata;
@@ -75,6 +84,7 @@ export class ZorveusOpenAI extends OpenAI {
 
       const merged = {
         ...(extId ? { external_user_id: extId } : {}),
+        ...(prodUserId ? { product_end_user_id: prodUserId } : {}),
         ...(aId ? { app_id: aId } : {}),
         ...(Object.keys(productUser).length > 0 ? { product_user: productUser } : {}),
         ...this.defaultMetadata,

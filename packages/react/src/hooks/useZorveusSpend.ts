@@ -8,10 +8,19 @@ export interface UseZorveusSpendOptions {
 
 export interface UseZorveusSpendReturn {
   usage: InferenceKeyUsageResponse | null;
+  /**
+   * Reference-priced virtual spend recorded on this key during the current period.
+   */
   spent: number;
   spentFormatted: string;
+  /**
+   * Base virtual allowance cap on this key (null if uncapped).
+   */
   spendCap: number | null;
   spendCapFormatted: string | null;
+  /**
+   * Remaining base virtual allowance on this key (null if uncapped).
+   */
   remainingBalance: number | null;
   remainingBalanceFormatted: string | null;
   currency: string;

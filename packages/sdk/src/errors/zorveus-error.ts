@@ -1,3 +1,5 @@
+import type { ProductUserAllowanceInsufficientParams } from "../types/product-users";
+
 /**
  * Base class for all Zorveus SDK errors.
  */
@@ -6,6 +8,7 @@ export class ZorveusError extends Error {
   readonly code?: string;
   readonly param?: string;
   readonly type?: string;
+  readonly params?: Record<string, unknown>;
   readonly headers?: Record<string, string>;
   readonly rawBody?: unknown;
 
@@ -16,6 +19,7 @@ export class ZorveusError extends Error {
       code?: string;
       param?: string;
       type?: string;
+      params?: Record<string, unknown>;
       headers?: Record<string, string>;
       rawBody?: unknown;
       cause?: unknown;
@@ -27,6 +31,7 @@ export class ZorveusError extends Error {
     this.code = options.code;
     this.param = options.param;
     this.type = options.type;
+    this.params = options.params;
     this.headers = options.headers;
     this.rawBody = options.rawBody;
     if (options.cause) {
@@ -62,6 +67,7 @@ export class APIStatusError extends ZorveusError {
       code?: string;
       param?: string;
       type?: string;
+      params?: Record<string, unknown>;
       headers?: Record<string, string>;
       rawBody?: unknown;
     }
@@ -142,6 +148,7 @@ export class ZorveusBusinessError extends APIStatusError {
       code?: string;
       param?: string;
       type?: string;
+      params?: Record<string, unknown>;
       headers?: Record<string, string>;
       rawBody?: unknown;
     }
@@ -152,22 +159,60 @@ export class ZorveusBusinessError extends APIStatusError {
 }
 
 /**
- * HTTP 402: Organization or product-user wallet balance is exhausted.
+ * HTTP 402: Organization wallet balance is exhausted or insufficient for estimated charge/fee.
  */
 export class InsufficientFundsError extends ZorveusBusinessError {
-  constructor(message = "Wallet balance exhausted. Top up required.", options: Omit<ConstructorParameters<typeof ZorveusBusinessError>[1], "status"> & { status?: number } = {}) {
-    super(message, { ...options, status: options.status ?? 402, code: options.code ?? "insufficient_funds" });
+  constructor(
+    message = "Wallet balance exhausted. Top up required.",
+    options: Omit<ConstructorParameters<typeof ZorveusBusinessError>[1], "status"> & { status?: number } = {}
+  ) {
+    super(message, {
+      ...options,
+      status: options.status ?? 402,
+      code: options.code ?? "zorveus_reservation_insufficient_balance"
+    });
     this.name = "InsufficientFundsError";
   }
 }
 
 /**
- * HTTP 402/403: Monthly or daily spending cap reached for organization, app connection, or product user.
+ * HTTP 403: Spending cap limit reached for inference key or member.
  */
 export class CapExceededError extends ZorveusBusinessError {
-  constructor(message = "Spending cap limit reached", options: Omit<ConstructorParameters<typeof ZorveusBusinessError>[1], "status"> & { status?: number } = {}) {
-    super(message, { ...options, status: options.status ?? 402, code: options.code ?? "cap_exceeded" });
+  constructor(
+    message = "Spending cap limit reached",
+    options: Omit<ConstructorParameters<typeof ZorveusBusinessError>[1], "status"> & { status?: number } = {}
+  ) {
+    super(message, {
+      ...options,
+      status: options.status ?? 403,
+      code: options.code ?? "zorveus_cap_exceeded"
+    });
     this.name = "CapExceededError";
+  }
+}
+
+/**
+ * HTTP 403: Enforced AI allowance exhausted for a product user on an inference key.
+ * Contains shortfall and breakdown between base cap and promotional credits.
+ */
+export class ProductUserAllowanceInsufficientError extends ZorveusBusinessError {
+  declare readonly params?: ProductUserAllowanceInsufficientParams;
+
+  constructor(
+    message = "Product user AI allowance is insufficient for this request.",
+    options: Omit<ConstructorParameters<typeof ZorveusBusinessError>[1], "status"> & {
+      status?: number;
+      params?: ProductUserAllowanceInsufficientParams;
+    } = {}
+  ) {
+    super(message, {
+      ...options,
+      status: options.status ?? 403,
+      code: options.code ?? "zorveus_product_user_allowance_insufficient",
+      params: options.params
+    });
+    this.name = "ProductUserAllowanceInsufficientError";
   }
 }
 
@@ -175,9 +220,50 @@ export class CapExceededError extends ZorveusBusinessError {
  * HTTP 403: Product user credit grant has expired.
  */
 export class CreditGrantExpiredError extends ZorveusBusinessError {
-  constructor(message = "Product user credit grant has expired", options: Omit<ConstructorParameters<typeof ZorveusBusinessError>[1], "status"> & { status?: number } = {}) {
-    super(message, { ...options, status: options.status ?? 403, code: options.code ?? "credit_grant_expired" });
+  constructor(
+    message = "Product user credit grant has expired",
+    options: Omit<ConstructorParameters<typeof ZorveusBusinessError>[1], "status"> & { status?: number } = {}
+  ) {
+    super(message, {
+      ...options,
+      status: options.status ?? 403,
+      code: options.code ?? "credit_grant_expired"
+    });
     this.name = "CreditGrantExpiredError";
+  }
+}
+
+/**
+ * HTTP 403: Supplied inference key or connected app is invalid or revoked.
+ */
+export class AppConnectionNotFoundError extends ZorveusBusinessError {
+  constructor(
+    message = "Inference key or app connection not found or revoked",
+    options: Omit<ConstructorParameters<typeof ZorveusBusinessError>[1], "status"> & { status?: number } = {}
+  ) {
+    super(message, {
+      ...options,
+      status: options.status ?? 403,
+      code: options.code ?? "zorveus_app_connection_not_found"
+    });
+    this.name = "AppConnectionNotFoundError";
+  }
+}
+
+/**
+ * HTTP 409: Idempotency key reused with mismatched request parameters.
+ */
+export class ReservationConflictError extends ZorveusBusinessError {
+  constructor(
+    message = "Idempotency key reused with conflicting request parameters",
+    options: Omit<ConstructorParameters<typeof ZorveusBusinessError>[1], "status"> & { status?: number } = {}
+  ) {
+    super(message, {
+      ...options,
+      status: options.status ?? 409,
+      code: options.code ?? "zorveus_reservation_conflict"
+    });
+    this.name = "ReservationConflictError";
   }
 }
 
@@ -193,6 +279,7 @@ export function createAPIError(
   let code: string | undefined;
   let param: string | undefined;
   let type: string | undefined;
+  let params: Record<string, unknown> | undefined;
 
   // Normalize string error bodies (including single-quoted Python dict strings)
   let parsedBody: unknown = body;
@@ -215,29 +302,70 @@ export function createAPIError(
   if (parsedBody && typeof parsedBody === "object") {
     const obj = parsedBody as Record<string, unknown>;
 
-    if (obj.error && typeof obj.error === "object") {
+    // Check OpenAI-compatible gateway wrapper: provider_specific_fields.error or error.provider_specific_fields.error
+    const providerFields = (
+      obj.provider_specific_fields ??
+      (obj.error as Record<string, unknown> | undefined)?.provider_specific_fields
+    ) as Record<string, unknown> | undefined;
+    const nestedGatewayError = (providerFields?.error ?? providerFields) as Record<string, unknown> | undefined;
+
+    if (nestedGatewayError && typeof nestedGatewayError === "object") {
+      if (typeof nestedGatewayError.message === "string") message = nestedGatewayError.message;
+      if (typeof nestedGatewayError.code === "string") code = nestedGatewayError.code;
+      if (typeof nestedGatewayError.param === "string") param = nestedGatewayError.param;
+      if (typeof nestedGatewayError.type === "string") type = nestedGatewayError.type;
+      if (nestedGatewayError.params && typeof nestedGatewayError.params === "object") {
+        params = nestedGatewayError.params as Record<string, unknown>;
+      }
+    } else if (obj.error && typeof obj.error === "object") {
       const err = obj.error as Record<string, unknown>;
       if (typeof err.message === "string") message = err.message;
       if (typeof err.code === "string") code = err.code;
       if (typeof err.param === "string") param = err.param;
       if (typeof err.type === "string") type = err.type;
-    } else if (typeof obj.detail === "string") {
-      message = obj.detail;
-    } else if (Array.isArray(obj.detail) && obj.detail.length > 0) {
-      const first = obj.detail[0];
-      if (first && typeof first.msg === "string") {
-        message = first.msg;
+      if (err.params && typeof err.params === "object") {
+        params = err.params as Record<string, unknown>;
       }
-    } else if (typeof obj.message === "string") {
-      message = obj.message;
+    } else {
+      if (typeof obj.message === "string") message = obj.message;
+      if (typeof obj.code === "string") code = obj.code;
+      if (typeof obj.param === "string") param = obj.param;
+      if (typeof obj.type === "string") type = obj.type;
+      if (obj.params && typeof obj.params === "object") {
+        params = obj.params as Record<string, unknown>;
+      }
+      if (typeof obj.detail === "string") {
+        message = obj.detail;
+      } else if (Array.isArray(obj.detail) && obj.detail.length > 0) {
+        const first = obj.detail[0];
+        if (first && typeof first.msg === "string") {
+          message = first.msg;
+        }
+      }
     }
   }
 
-  const options = { status, code, param, type, headers, rawBody: body };
-
-  // Check specific business error codes first
+  const options = { status, code, param, type, params, headers, rawBody: body };
   const normalizedCode = (code || "").toLowerCase();
+
+  // 1. Enforced product-user allowance denial (HTTP 403)
   if (
+    normalizedCode === "zorveus_product_user_allowance_insufficient" ||
+    normalizedCode === "zorveus_product_user_credits_insufficient" ||
+    normalizedCode.includes("allowance_insufficient") ||
+    normalizedCode.includes("credits_insufficient") ||
+    message.toLowerCase().includes("allowance remaining")
+  ) {
+    return new ProductUserAllowanceInsufficientError(message, {
+      ...options,
+      status: status === 200 ? 403 : status,
+      params: params as ProductUserAllowanceInsufficientParams | undefined
+    });
+  }
+
+  // 2. Spending cap exceeded (HTTP 403)
+  if (
+    normalizedCode === "zorveus_cap_exceeded" ||
     normalizedCode.includes("cap_exceed") ||
     normalizedCode.includes("spend_cap") ||
     message.toLowerCase().includes("spending cap")
@@ -245,7 +373,27 @@ export function createAPIError(
     return new CapExceededError(message, options);
   }
 
+  // 3. App connection not found / revoked (HTTP 403)
   if (
+    normalizedCode === "zorveus_app_connection_not_found" ||
+    normalizedCode.includes("app_connection_not_found")
+  ) {
+    return new AppConnectionNotFoundError(message, options);
+  }
+
+  // 4. Idempotency reservation conflict (HTTP 409)
+  if (
+    status === 409 ||
+    normalizedCode === "zorveus_reservation_conflict" ||
+    normalizedCode.includes("reservation_conflict")
+  ) {
+    return new ReservationConflictError(message, options);
+  }
+
+  // 5. Wallet insufficient balance (HTTP 402)
+  if (
+    status === 402 ||
+    normalizedCode === "zorveus_reservation_insufficient_balance" ||
     normalizedCode.includes("insufficient_funds") ||
     normalizedCode.includes("balance_exhausted") ||
     normalizedCode.includes("insufficient_balance") ||
@@ -257,17 +405,14 @@ export function createAPIError(
     return new InsufficientFundsError(message, options);
   }
 
+  // 6. Expired credit grant (HTTP 403)
   if (normalizedCode.includes("grant_expired")) {
     return new CreditGrantExpiredError(message, options);
   }
 
-  // Check by HTTP status code
+  // Status code based fallback mapping
   if (status === 401) {
     return new AuthenticationError(message, options);
-  }
-
-  if (status === 402) {
-    return new InsufficientFundsError(message, options);
   }
 
   if (status === 403) {
@@ -292,3 +437,36 @@ export function createAPIError(
 
   return new APIStatusError(message, options);
 }
+
+/**
+ * Parses errors thrown by OpenAI SDK or Vercel AI SDK into typed Zorveus errors.
+ */
+export function parseZorveusGatewayError(error: unknown): ZorveusError | unknown {
+  if (error instanceof ZorveusError) {
+    return error;
+  }
+
+  if (!error || typeof error !== "object") {
+    return error;
+  }
+
+  const errObj = error as Record<string, unknown>;
+  const status =
+    typeof errObj.status === "number"
+      ? errObj.status
+      : typeof errObj.statusCode === "number"
+        ? errObj.statusCode
+        : undefined;
+
+  const rawBody = errObj.error ?? errObj.body ?? errObj.rawBody;
+  if (status !== undefined && rawBody !== undefined) {
+    const headers =
+      errObj.headers && typeof errObj.headers === "object"
+        ? (errObj.headers as Record<string, string>)
+        : undefined;
+    return createAPIError(status, rawBody, headers);
+  }
+
+  return error;
+}
+

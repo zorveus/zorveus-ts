@@ -14,6 +14,7 @@
     "demo:node": "npx tsx examples/node-scripts/inference-demo.ts",
     "demo:management": "npx tsx examples/node-scripts/management-demo.ts",
     "demo:oauth": "npx tsx examples/node-scripts/oauth-pkce-demo.ts",
+    "test:examples": "npx tsx examples/node-scripts/test-all.ts",
     "demo:mindspire": "npm run --workspace=@zorveus/mindspire-studio dev",
     "demo:saasify": "npm run --workspace=@zorveus/saasify-suite dev",
     "demo:react": "npm run demo:mindspire",

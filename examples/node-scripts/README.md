@@ -7,6 +7,7 @@ Standalone TypeScript scripts demonstrating `@zorveus/sdk` in Node.js backend en
 1. **`inference-demo.ts`**: Non-streaming and streaming chat completions across foundation models.
 2. **`management-demo.ts`**: Product user provisioning, profile inspection, credit grants, and ledger queries.
 3. **`oauth-pkce-demo.ts`**: OAuth 2.0 PKCE authorization URL generation, state validation, and token exchange.
+4. **`test-all.ts`**: Comprehensive test suite checking all service plane and inference plane functions against live backends.
 
 ## How to run
 
@@ -15,6 +16,9 @@ Standalone TypeScript scripts demonstrating `@zorveus/sdk` in Node.js backend en
 From the monorepo root:
 
 ```bash
+# Run comprehensive live function test suite
+npm run test:examples
+
 # Run AI inference demo
 npm run demo:node
 

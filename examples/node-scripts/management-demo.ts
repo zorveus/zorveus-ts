@@ -1,15 +1,8 @@
-/**
- * Demo: Server-Side Startup Control Plane with ZorveusServiceClient
- *
- * To run:
- * npm run demo:management
- */
-
 import fs from "fs";
 import path from "path";
 import { ZorveusServiceClient } from "../../packages/sdk/src/index";
 
-// Auto-load examples/node-scripts/.env if present
+// Load environment variables if present
 const envPath = path.resolve(__dirname, ".env");
 if (fs.existsSync(envPath) && typeof (process as any).loadEnvFile === "function") {
   try {
@@ -18,79 +11,106 @@ if (fs.existsSync(envPath) && typeof (process as any).loadEnvFile === "function"
 }
 
 async function main() {
-  const serviceKey = process.env.ZORVEUS_SERVICE_KEY || "zrv_service_live_demo_12345";
-  const appId = process.env.ZORVEUS_APP_ID || "app_demo_123";
+  const serviceKey = process.env.ZORVEUS_SERVICE_KEY;
+  const appId = process.env.ZORVEUS_APP_ID;
+  const baseURL = process.env.ZORVEUS_BASE_URL || "http://localhost:8000";
+
+  if (!serviceKey || !appId) {
+    console.error("Missing ZORVEUS_SERVICE_KEY or ZORVEUS_APP_ID in environment.");
+    return;
+  }
 
   console.log("==================================================");
-  console.log("Zorveus Server-Side Startup Control Plane Demo");
-  console.log(`Using Service Key: ${serviceKey.slice(0, 15)}...`);
-  console.log(`Using Application ID: ${appId}`);
+  console.log("Zorveus Service Client Management Demo");
+  console.log(`Base URL: ${baseURL}`);
+  console.log(`App ID:   ${appId}`);
   console.log("==================================================\n");
 
-  const serviceClient = new ZorveusServiceClient({
+  const service = new ZorveusServiceClient({
     apiKey: serviceKey,
-    baseURL: process.env.ZORVEUS_BASE_URL || "https://api.zorveus.com"
+    baseURL
   });
 
-  const externalUserId = "usr_ext_demo_8842";
+  const externalUserId = `user_demo_${Date.now()}`;
 
-  console.log("1. Upserting Product End-User Server-Side...");
-  try {
-    const res = await serviceClient.productUsers.createOrUpdate({
-      appId,
-      externalUserId,
-      displayName: "Jane Doe",
-      email: "jane@startup.com",
-      metadata: { tier: "enterprise", plan: "pro" }
-    });
-    console.log(`✓ Product User Upserted: Status=${res.product_user?.status || "active"}, Created=${res.created}`);
+  // 1. Upsert product end-user
+  console.log("1. Upserting product user by external ID...");
+  const upsertRes = await service.productUsers.createOrUpdate({
+    appId,
+    externalUserId,
+    displayName: "Demo Operator",
+    email: "operator@example.com",
+    metadata: { tier: "pro", department: "engineering" }
+  });
+  console.log(`Created: ${upsertRes.created}`);
+  console.log(`User ID: ${upsertRes.product_user?.product_end_user_id}`);
+  console.log(`Status:  ${upsertRes.product_user?.status}`);
 
-    console.log("\n2. Granting Startup-Funded AI Credits via External User ID...");
-    const grantRes = await serviceClient.productUsers.grantCreditByExternalId({
-      appId,
-      externalUserId,
-      amount: "25.000000000000", // High-precision decimal string
-      currency: "USD",
-      source: "promotion",
-      reason: "Monthly enterprise allowance"
-    });
-    console.log(`✓ Credit Grant ID=${grantRes.credit_grant.credit_grant_id}, Amount=$${grantRes.credit_grant.amount}`);
-    console.log(`✓ New Live Balance=$${grantRes.credit_summary?.available_credits ?? "N/A"}`);
+  // 2. Retrieve user profile
+  console.log("\n2. Getting user profile by external ID...");
+  const user = await service.productUsers.getByExternalId({
+    appId,
+    externalUserId
+  });
+  console.log(`Email:   ${user.email}`);
+  console.log(`Status:  ${user.status}`);
 
-    console.log("\n3. Querying User Credit Ledger...");
-    const ledger = await serviceClient.productUsers.listCreditGrantsByExternalId({
-      appId,
-      externalUserId
-    });
-    for (const grant of ledger.credit_grants) {
-      console.log(`  - Grant ID ${grant.credit_grant_id}: $${grant.amount} (${grant.source}) - ${grant.reason}`);
-    }
+  // 3. Grant financial credits
+  console.log("\n3. Granting startup-funded AI credits...");
+  const grantRes = await service.productUsers.grantCreditByExternalId({
+    appId,
+    externalUserId,
+    amount: "25.000000000000",
+    currency: "USD",
+    source: "promotion",
+    reason: "Monthly enterprise credit grant"
+  });
+  console.log(`Grant ID: ${grantRes.credit_grant?.credit_grant_id}`);
+  console.log(`Amount:   $${grantRes.credit_grant?.amount}`);
 
-  } catch (error) {
-    console.log(`[Demo Notice] Server Request: ${(error as Error).message}`);
+  // 4. Query live credit summary
+  console.log("\n4. Querying live credit summary...");
+  const summary = await service.productUsers.getCreditSummaryByExternalId({
+    appId,
+    externalUserId
+  });
+  console.log(`Available Credits: $${summary.available_credits}`);
+  console.log(`Spent This Month:  $${summary.spent_this_month}`);
+
+  // 5. Query credit grant ledger
+  console.log("\n5. Listing credit grant ledger...");
+  const ledger = await service.productUsers.listCreditGrantsByExternalId({
+    appId,
+    externalUserId
+  });
+  const grants = ledger.credit_grants ?? [];
+  console.log(`Total Grants: ${grants.length}`);
+  for (const grant of grants) {
+    console.log(` - ID: ${grant.credit_grant_id} | Amount: $${grant.amount} | Reason: ${grant.reason}`);
   }
 
-  console.log("\n--------------------------------------------------");
-  console.log("4. Registering Organization BYOK Provider Credential...");
+  // 6. List programmatic BYOK provider credentials
+  console.log("\n6. Listing programmatic provider credentials...");
   try {
-    const cred = await serviceClient.providerCredentials.create({
-      provider: "openai",
-      credentialName: "Startup OpenAI Production Key",
-      apiKey: "sk-proj-demo123",
-      routingMode: "auto_resolve",
-      routingPriority: 100
-    });
-    console.log(`✓ Provider Credential Registered: ID=${cred.provider_credential_id}, Provider=${cred.provider}`);
-  } catch (error: any) {
-    if (error.code === "zorveus_invalid_provider_credential") {
-      console.log("ℹ Note: Provider credential payload validated by Zorveus backend (rejected mock API key as expected).");
-    } else {
-      console.log(`[Demo Notice] Server Request: ${error.message || error}`);
+    const creds = await service.providerCredentials.list();
+    const list = creds.credentials ?? [];
+    console.log(`Registered Credentials: ${list.length}`);
+    for (const cred of list) {
+      console.log(` - ${cred.provider} (${cred.credential_name ?? "default"}) [${cred.status}]`);
     }
+  } catch (err: any) {
+    console.log(`Credential listing: ${err.message}`);
   }
+
+  // 7. Query supported provider catalog
+  console.log("\n7. Listing supported provider catalog...");
+  const catalog = await service.providerCredentials.listProviders();
+  const providers = catalog.providers ?? [];
+  console.log(`Supported AI Providers: ${providers.length}`);
+  console.log(`Sample Providers: ${providers.slice(0, 8).join(", ")}...`);
 
   console.log("\n==================================================");
-  console.log("Startup Server Control Plane Demo Completed!");
+  console.log("Management demo finished successfully.");
   console.log("==================================================");
 }
 

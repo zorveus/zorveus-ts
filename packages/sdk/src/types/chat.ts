@@ -33,6 +33,11 @@ export interface ZorveusMetadata {
   externalUserId?: string;
 
   /**
+   * Zorveus product end-user ID (e.g. "peu_...").
+   */
+  productEndUserId?: string;
+
+  /**
    * Customer's display name.
    */
   displayName?: string;
@@ -56,6 +61,7 @@ export interface ZorveusGatewayProductUserMetadata {
 
 export interface ZorveusGatewayMetadata {
   external_user_id?: string;
+  product_end_user_id?: string;
   product_user?: ZorveusGatewayProductUserMetadata;
 }
 
@@ -71,6 +77,10 @@ export function formatGatewayMetadata(
 
   if (meta.externalUserId) {
     result.external_user_id = meta.externalUserId;
+  }
+
+  if (meta.productEndUserId) {
+    result.product_end_user_id = meta.productEndUserId;
   }
 
   if (meta.displayName !== undefined || meta.userEmail !== undefined || meta.metadata !== undefined) {

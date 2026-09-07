@@ -31,7 +31,27 @@
         "default": "./dist/adapters/openai.js"
       }
     },
+    "./adapters/openai": {
+      "import": {
+        "types": "./dist/adapters/openai.d.ts",
+        "default": "./dist/adapters/openai.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/openai.d.ts",
+        "default": "./dist/adapters/openai.js"
+      }
+    },
     "./vercel": {
+      "import": {
+        "types": "./dist/adapters/vercel.d.ts",
+        "default": "./dist/adapters/vercel.mjs"
+      },
+      "require": {
+        "types": "./dist/adapters/vercel.d.ts",
+        "default": "./dist/adapters/vercel.js"
+      }
+    },
+    "./adapters/vercel": {
       "import": {
         "types": "./dist/adapters/vercel.d.ts",
         "default": "./dist/adapters/vercel.mjs"

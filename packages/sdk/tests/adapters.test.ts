@@ -46,6 +46,43 @@ describe("OpenAI SDK Adapter (ZorveusOpenAI)", () => {
     });
   });
 
+  it("maps body.user and productEndUserId to metadata attribution", async () => {
+    let capturedBody: any = null;
+
+    const customFetch = vi.fn().mockImplementation(async (url, init) => {
+      if (init?.body) {
+        capturedBody = JSON.parse(init.body as string);
+      }
+      return new Response(
+        JSON.stringify({
+          id: "chatcmpl-124",
+          object: "chat.completion",
+          created: 1677652288,
+          model: "openai/gpt-4.1-mini",
+          choices: [{ index: 0, message: { role: "assistant", content: "Hello!" }, finish_reason: "stop" }]
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+
+    const openai = new ZorveusOpenAI({
+      apiKey: "zrv_live_test_key_123",
+      productEndUserId: "peu_9876",
+      fetch: customFetch
+    });
+
+    await openai.chat.completions.create({
+      model: "openai/gpt-4.1-mini",
+      messages: [{ role: "user", content: "Hi" }],
+      user: "usr_openai_end_user_42"
+    });
+
+    expect(capturedBody).not.toBeNull();
+    expect(capturedBody.metadata).toBeDefined();
+    expect(capturedBody.metadata.external_user_id).toBe("usr_openai_end_user_42");
+    expect(capturedBody.metadata.product_end_user_id).toBe("peu_9876");
+  });
+
   it("automatically injects metadata.external_user_id into responses.create if present", async () => {
     let capturedBody: any = null;
 

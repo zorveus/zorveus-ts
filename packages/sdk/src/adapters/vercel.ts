@@ -1,9 +1,11 @@
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
+export { parseZorveusGatewayError } from "../errors/zorveus-error";
 
 export interface ZorveusVercelOptions {
   apiKey?: string;
   baseURL?: string;
   externalUserId?: string;
+  productEndUserId?: string;
   displayName?: string;
   userEmail?: string;
   email?: string;
@@ -16,7 +18,7 @@ export interface ZorveusVercelOptions {
 
 /**
  * Creates a Vercel AI SDK provider instance configured for Zorveus AI Gateway,
- * automatically injecting metadata (external_user_id and product_user attribution) into request payloads.
+ * automatically injecting metadata (external_user_id, product_end_user_id, and product_user attribution) into request payloads.
  */
 export function createZorveus(options: ZorveusVercelOptions = {}): OpenAIProvider {
   const apiKey = options.apiKey ?? process.env.ZORVEUS_INFERENCE_KEY;
@@ -31,7 +33,11 @@ export function createZorveus(options: ZorveusVercelOptions = {}): OpenAIProvide
       try {
         const bodyObj = JSON.parse(init.body);
 
-        const extId = bodyObj.external_user_id ?? options.externalUserId;
+        const extId = bodyObj.user ?? bodyObj.external_user_id ?? options.externalUserId;
+        const prodUserId =
+          bodyObj.product_end_user_id ??
+          bodyObj.metadata?.product_end_user_id ??
+          options.productEndUserId;
         const dName = bodyObj.display_name ?? options.displayName;
         const uEmail = bodyObj.user_email ?? bodyObj.email ?? options.userEmail ?? options.email;
         const uMeta = bodyObj.user_metadata ?? options.userMetadata;
@@ -46,6 +52,7 @@ export function createZorveus(options: ZorveusVercelOptions = {}): OpenAIProvide
 
         const merged = {
           ...(extId ? { external_user_id: extId } : {}),
+          ...(prodUserId ? { product_end_user_id: prodUserId } : {}),
           ...(aId ? { app_id: aId } : {}),
           ...(Object.keys(productUser).length > 0 ? { product_user: productUser } : {}),
           ...options.metadata,

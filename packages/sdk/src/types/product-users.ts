@@ -1,5 +1,29 @@
 export type ProductUserStatus = "active" | "suspended";
 
+/**
+ * App connection credit enforcement mode.
+ */
+export type CreditMode = "disabled" | "track_only" | "enforce_if_present" | "enforce";
+export type AppConnectionCreditMode = CreditMode;
+
+/**
+ * Error parameters returned by the gateway when an enforced allowance is insufficient.
+ */
+export interface ProductUserAllowanceInsufficientParams {
+  cap_rule_id: string;
+  cap_period: "daily" | "weekly" | "monthly" | "lifetime" | string;
+  currency: string;
+  cap_amount: string; // 12-decimal string
+  settled_spend_this_period: string; // 12-decimal string
+  active_reservations_amount: string; // 12-decimal string
+  remaining_base_allowance: string; // 12-decimal string
+  promotional_credit_balance: string; // 12-decimal string
+  available_allowance: string; // 12-decimal string
+  estimated_request_cost: string; // 12-decimal string
+  shortfall: string; // 12-decimal string
+  [key: string]: unknown;
+}
+
 export interface ProductUserCapResponse {
   source: string;
   cap_rule_id: string;
