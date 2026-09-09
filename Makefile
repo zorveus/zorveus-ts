@@ -36,8 +36,16 @@ release:
 	@npm run build
 	@npm run typecheck
 	@npm run test
-	@git add packages/sdk/package.json packages/react/package.json
-	@git commit -m "release: v$(VERSION)"
-	@git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
+	@git add package-lock.json packages/sdk/package.json packages/react/package.json
+	@if git diff --cached --quiet; then \
+		echo "Package versions already set to $(VERSION); no release commit needed."; \
+	else \
+		git commit -m "release: v$(VERSION)"; \
+	fi
+	@if git rev-parse -q --verify "refs/tags/v$(VERSION)" >/dev/null; then \
+		echo "Release tag v$(VERSION) already exists."; \
+	else \
+		git tag -a "v$(VERSION)" -m "Release v$(VERSION)"; \
+	fi
 	@git push origin main --tags
 	@echo "Version updated, committed, and tag v$(VERSION) pushed to GitHub!"
