@@ -108,6 +108,19 @@ async function main() {
     console.log("\nAI Response:");
     console.log(completion.choices[0]?.message?.content);
 
+    if (process.env.ZORVEUS_REVOKE_OAUTH_TOKEN === "true") {
+      console.log("\n6. Revoking the test OAuth token...");
+      await ZorveusOAuth.revokeToken({
+        token: tokenRes.access_token,
+        clientId,
+        clientSecret,
+        baseURL
+      });
+      console.log("OAuth token revoked.");
+    } else {
+      console.log("\nToken revocation skipped. Set ZORVEUS_REVOKE_OAUTH_TOKEN=true to test it.");
+    }
+
   } catch (err: any) {
     console.log("\nToken exchange step reached.");
     console.log(`Result: ${err.message || err}`);

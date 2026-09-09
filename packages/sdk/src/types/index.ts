@@ -5,3 +5,4 @@ export * from "./models";
 export * from "./product-users";
 export * from "./provider-credentials";
 export * from "./oauth";
+export * from "./usage-events";

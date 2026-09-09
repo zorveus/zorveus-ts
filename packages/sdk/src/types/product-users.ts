@@ -38,6 +38,12 @@ export interface ProductUserCapResponse {
 
 export interface ProductUserUsageMetrics {
   sell_cost: string; // Decimal string
+  /** Reference-priced usage consumed against caps and credits. */
+  virtual_spend?: string;
+  /** Upstream provider cost, when the caller may view it. */
+  provider_cost?: string;
+  /** Usage beyond available allowance in track-only or overrun cases. */
+  uncovered_virtual_spend?: string;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
@@ -200,6 +206,7 @@ export interface ListCreditGrantsByExternalIdParams {
 
 export interface ProductUserListParams {
   orgId?: string;
+  appId?: string;
   limit?: number;
   offset?: number;
 }

@@ -118,6 +118,8 @@ export interface InferenceKeyUsageResponse {
   period: "daily" | "weekly" | "monthly" | "lifetime" | string;
   spend_cap: string | null; // Decimal string or null if uncapped
   spent_this_period: string; // Decimal string
+  /** Explicit reference-priced spend, when returned by newer API versions. */
+  virtual_spend_this_period?: string;
   remaining_balance: string | null; // Decimal string or null if uncapped
   reset_at: string | null;
 }

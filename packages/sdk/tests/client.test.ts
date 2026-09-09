@@ -54,6 +54,7 @@ describe("Client Instantiation & Usage", () => {
 
     expect(client.productUsers).toBeDefined();
     expect(client.providerCredentials).toBeDefined();
+    expect(client.usageEvents).toBeDefined();
   });
 
   it("throws error when ZorveusServiceClient is missing apiKey", () => {

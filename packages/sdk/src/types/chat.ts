@@ -169,6 +169,11 @@ export interface ChatCompletionUsage {
   total_tokens: number;
   prompt_tokens_details?: {
     cached_tokens?: number;
+    cache_creation_tokens?: number;
+    cache_creation_token_details?: {
+      ephemeral_5m_input_tokens?: number;
+      ephemeral_1h_input_tokens?: number;
+    };
   };
   completion_tokens_details?: {
     reasoning_tokens?: number;

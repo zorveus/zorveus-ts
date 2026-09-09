@@ -8,6 +8,7 @@ Official TypeScript and JavaScript client library for the [Zorveus](https://zorv
 - **Product User management and credit grants**: Track spend limits, query live balances, and grant promotional credits using `externalUserId`.
 - **Model discovery**: Query available models for an inference key with `client.models.list({ routeStatus: "available" })`.
 - **Spend tracking**: Real-time spending and remaining balance queries with `client.getUsage()`.
+- **Finance reporting**: Cursor-paginated usage events with wallet, BYOK, cache, and settlement fields.
 - **OAuth 2.0 PKCE utilities**: PKCE parameters generation, authorization URL construction, and token exchange helpers.
 - **Provider credentials management**: Store and route provider keys.
 
@@ -214,6 +215,27 @@ console.log("App connection ID:", tokenData.app_connection_id);
 | `grantCreditByExternalId(params)` | Issue credits anchored to external ID (`POST /product-users/by-external-id/credit-grants`) |
 | `list(params)` | List organization product users (`GET /product-users`) |
 | `revokeCredit(userIdentifier, grantId)` | Revoke active grant (`POST /product-users/{id}/credit-grants/{grantId}/revoke`) |
+
+### `ZorveusServiceClient.usageEvents` (finance reporting)
+
+```typescript
+import { normalInputTokens, ZorveusServiceClient } from "@zorveus/sdk";
+
+const service = new ZorveusServiceClient({ apiKey: process.env.ZORVEUS_SERVICE_KEY });
+const page = await service.usageEvents.list({ orgId: "org_123", limit: 50 });
+
+for (const event of page.events) {
+  console.log({
+    virtualSpend: event.virtual_spend,
+    walletCharge: event.sell_cost,
+    providerCost: event.provider_cost,
+    cacheSavings: event.cache_savings,
+    normalInputTokens: normalInputTokens(event)
+  });
+}
+```
+
+All monetary fields are decimal strings. Keep them as strings or use a decimal-number library. Do not use `parseFloat()` for financial calculations. `normalInputTokens()` returns `null` unless the provider reported a valid cache breakdown.
 
 ### `ZorveusServiceClient.providerCredentials` (BYOK management)
 

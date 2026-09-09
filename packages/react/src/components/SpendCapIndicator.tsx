@@ -1,4 +1,5 @@
 import React from "react";
+import { decimalPercentage, formatDecimalString } from "@zorveus/sdk";
 import { tokens } from "../styles/styles";
 import { useZorveusSpend, type UseZorveusSpendReturn } from "../hooks/useZorveusSpend";
 
@@ -12,8 +13,10 @@ export interface SpendCapStatusLabels {
 export interface SpendCapRenderData {
   current: number;
   currentFormatted: string;
+  currentDecimal: string;
   limit: number | null;
   limitFormatted: string | null;
+  limitDecimal: string | null;
   remainingBalance: number | null;
   remainingBalanceFormatted: string | null;
   percentage: number;
@@ -110,26 +113,31 @@ export function SpendCapIndicator(props: SpendCapIndicatorProps): React.JSX.Elem
   const isAutoMode = props.current === undefined && props.limit === undefined;
   const autoSpend = useZorveusSpend({ autoFetch: isAutoMode });
 
-  const currentVal = props.current !== undefined ? props.current : autoSpend.spent;
-  const limitVal = props.limit !== undefined ? props.limit : autoSpend.spendCap;
+  const currentVal = props.current !== undefined ? props.current : autoSpend.spentDecimal;
+  const limitVal = props.limit !== undefined ? props.limit : autoSpend.spendCapDecimal;
   const period = props.period || autoSpend.period || "monthly";
   const currency = props.currency || autoSpend.currency || "USD";
   const theme = props.theme || "light";
   const warningThreshold = props.warningThreshold ?? 0.8;
   const showDetails = props.showDetails ?? true;
 
-  const numCurrent = typeof currentVal === "number" ? currentVal : parseFloat(String(currentVal || "0"));
+  const currentDecimal = String(currentVal ?? "0");
+  const limitDecimal = limitVal !== null && limitVal !== undefined ? String(limitVal) : null;
+  const numCurrent = Number(currentDecimal);
   const numLimit = limitVal !== null && limitVal !== undefined
     ? (typeof limitVal === "number" ? limitVal : parseFloat(String(limitVal || "0")))
     : null;
 
   const isUncapped = numLimit === null || isNaN(numLimit) || numLimit <= 0;
-  const ratio = !isUncapped && numLimit > 0 ? numCurrent / numLimit : 0;
-  const percentage = isUncapped ? 100 : Math.min(100, Math.max(0, ratio * 100));
+  const rawPercentage = !isUncapped && limitDecimal
+    ? decimalPercentage(currentDecimal, limitDecimal)
+    : 0;
+  const ratio = rawPercentage / 100;
+  const percentage = isUncapped ? 100 : Math.min(100, Math.max(0, rawPercentage));
 
   const format = props.formatAmount || ((amt, cur) => {
     const sym = cur === "USD" ? "$" : `${cur} `;
-    return `${sym}${amt.toFixed(2)}`;
+    return `${sym}${formatDecimalString(String(amt))}`;
   });
 
   const defaultStatusLabels: Required<SpendCapStatusLabels> = {
@@ -175,9 +183,17 @@ export function SpendCapIndicator(props: SpendCapIndicatorProps): React.JSX.Elem
 
   const renderData: SpendCapRenderData = {
     current: numCurrent,
-    currentFormatted: format(numCurrent, currency),
+    currentDecimal,
+    currentFormatted: props.formatAmount
+      ? format(numCurrent, currency)
+      : `${currency === "USD" ? "$" : `${currency} `}${formatDecimalString(currentDecimal)}`,
     limit: numLimit,
-    limitFormatted: numLimit !== null ? format(numLimit, currency) : null,
+    limitDecimal,
+    limitFormatted: limitDecimal !== null
+      ? props.formatAmount
+        ? format(numLimit as number, currency)
+        : `${currency === "USD" ? "$" : `${currency} `}${formatDecimalString(limitDecimal)}`
+      : null,
     remainingBalance: autoSpend.remainingBalance,
     remainingBalanceFormatted: autoSpend.remainingBalanceFormatted,
     percentage,

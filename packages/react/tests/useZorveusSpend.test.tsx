@@ -46,10 +46,13 @@ describe("useZorveusSpend", () => {
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
       expect(result.current.spent).toBe(12.5);
+      expect(result.current.spentDecimal).toBe("12.500000000000");
       expect(result.current.spentFormatted).toBe("12.50");
       expect(result.current.spendCap).toBe(50);
+      expect(result.current.spendCapDecimal).toBe("50.000000000000");
       expect(result.current.spendCapFormatted).toBe("50.00");
       expect(result.current.remainingBalance).toBe(37.5);
+      expect(result.current.remainingBalanceDecimal).toBe("37.500000000000");
       expect(result.current.remainingBalanceFormatted).toBe("37.50");
       expect(result.current.currency).toBe("USD");
       expect(result.current.status).toBe("active");

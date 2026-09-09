@@ -1,301 +1,401 @@
 import fs from "fs";
 import path from "path";
-import { Zorveus, ZorveusServiceClient, parseZorveusGatewayError } from "../../packages/sdk/src/index";
+import readline from "readline/promises";
+import { stdin as input, stdout as output } from "process";
+import {
+  Zorveus,
+  ZorveusServiceClient,
+  normalInputTokens,
+  parseZorveusGatewayError
+} from "../../packages/sdk/src/index";
 import { ZorveusOpenAI } from "../../packages/sdk/src/adapters/openai";
+import { createZorveus } from "../../packages/sdk/src/adapters/vercel";
 
-// Auto-load examples/node-scripts/.env if present
 const envPath = path.resolve(__dirname, ".env");
-if (fs.existsSync(envPath) && typeof (process as any).loadEnvFile === "function") {
-  try {
-    (process as any).loadEnvFile(envPath);
-  } catch {}
+if (fs.existsSync(envPath) && typeof process.loadEnvFile === "function") {
+  process.loadEnvFile(envPath);
 }
 
-const serviceKey = process.env.ZORVEUS_SERVICE_KEY;
-const appId = process.env.ZORVEUS_APP_ID;
-const inferenceKey = process.env.ZORVEUS_INFERENCE_KEY;
 const baseURL = process.env.ZORVEUS_BASE_URL || "http://localhost:8000";
 const gatewayBaseURL = process.env.ZORVEUS_GATEWAY_URL || "http://localhost:4000/v1";
+const rl = readline.createInterface({ input, output });
 
-interface Check {
-  category: string;
-  name: string;
-  ok: boolean;
-  info: string;
+let inferenceClient: Zorveus | undefined;
+let serviceClient: ZorveusServiceClient | undefined;
+
+async function ask(label: string, defaultValue?: string): Promise<string> {
+  const suffix = defaultValue ? ` [${defaultValue}]` : "";
+  const answer = (await rl.question(`${label}${suffix}: `)).trim();
+  return answer || defaultValue || "";
 }
 
-const checks: Check[] = [];
-
-function pass(category: string, name: string, info: string) {
-  checks.push({ category, name, ok: true, info });
-  console.log(`[PASS] [${category}] ${name}: ${info}`);
+async function requireValue(label: string, envName: string): Promise<string> {
+  const value = await ask(label, process.env[envName]);
+  if (!value) throw new Error(`${envName} is required for this operation.`);
+  return value;
 }
 
-function fail(category: string, name: string, info: string) {
-  checks.push({ category, name, ok: false, info });
-  console.log(`[FAIL] [${category}] ${name}: ${info}`);
+async function getInferenceClient(): Promise<Zorveus> {
+  if (!inferenceClient) {
+    inferenceClient = new Zorveus({
+      apiKey: await requireValue("Inference key", "ZORVEUS_INFERENCE_KEY"),
+      baseURL,
+      gatewayBaseURL
+    });
+  }
+  return inferenceClient;
 }
 
-async function testServicePlane() {
-  console.log("\n--- Testing ZorveusServiceClient (Management Control Plane) ---");
-
-  if (!serviceKey || !appId) {
-    fail("ServicePlane", "Environment", "Missing ZORVEUS_SERVICE_KEY or ZORVEUS_APP_ID");
-    return;
-  }
-
-  const service = new ZorveusServiceClient({
-    apiKey: serviceKey,
-    baseURL
-  });
-
-  const testExternalId = `test_runner_${Date.now()}`;
-
-  // 1. productUsers.createOrUpdate
-  try {
-    const res = await service.productUsers.createOrUpdate({
-      appId,
-      externalUserId: testExternalId,
-      displayName: "Live Test Runner",
-      email: "runner@test.local",
-      metadata: { env: "local_test", automated: true }
-    });
-    pass("ServicePlane", "productUsers.createOrUpdate", `User created: ${res.created}, ID: ${res.product_user?.product_end_user_id}`);
-  } catch (err: any) {
-    fail("ServicePlane", "productUsers.createOrUpdate", err.message);
-  }
-
-  // 2. productUsers.getByExternalId
-  try {
-    const user = await service.productUsers.getByExternalId({
-      appId,
-      externalUserId: testExternalId
-    });
-    pass("ServicePlane", "productUsers.getByExternalId", `Status: ${user.status}, External ID: ${user.external_user_id}`);
-  } catch (err: any) {
-    fail("ServicePlane", "productUsers.getByExternalId", err.message);
-  }
-
-  // 3. productUsers.grantCreditByExternalId
-  try {
-    const grant = await service.productUsers.grantCreditByExternalId({
-      appId,
-      externalUserId: testExternalId,
-      amount: "20.000000000000",
-      currency: "USD",
-      source: "promotion",
-      reason: "Live suite grant"
-    });
-    pass("ServicePlane", "productUsers.grantCreditByExternalId", `Grant ID: ${grant.credit_grant?.credit_grant_id}, Amount: $${grant.credit_grant?.amount}`);
-  } catch (err: any) {
-    fail("ServicePlane", "productUsers.grantCreditByExternalId", err.message);
-  }
-
-  // 4. productUsers.getCreditSummaryByExternalId
-  try {
-    const summary = await service.productUsers.getCreditSummaryByExternalId({
-      appId,
-      externalUserId: testExternalId
-    });
-    pass("ServicePlane", "productUsers.getCreditSummaryByExternalId", `Available: $${summary.available_credits}, Spent: $${summary.spent_this_month}`);
-  } catch (err: any) {
-    fail("ServicePlane", "productUsers.getCreditSummaryByExternalId", err.message);
-  }
-
-  // 5. productUsers.listCreditGrantsByExternalId
-  try {
-    const ledger = await service.productUsers.listCreditGrantsByExternalId({
-      appId,
-      externalUserId: testExternalId
-    });
-    pass("ServicePlane", "productUsers.listCreditGrantsByExternalId", `Grants in ledger: ${ledger.credit_grants?.length ?? 0}`);
-  } catch (err: any) {
-    fail("ServicePlane", "productUsers.listCreditGrantsByExternalId", err.message);
-  }
-
-  // 6. providerCredentials.list (via /provider-credentials/org-programmatic)
-  try {
-    const creds = await service.providerCredentials.list();
-    pass("ServicePlane", "providerCredentials.list", `Registered credentials: ${creds.credentials?.length ?? 0}`);
-  } catch (err: any) {
-    fail("ServicePlane", "providerCredentials.list", err.message);
-  }
-
-  // 7. providerCredentials.listProviders
-  try {
-    const catalog = await service.providerCredentials.listProviders();
-    pass("ServicePlane", "providerCredentials.listProviders", `Supported providers in catalog: ${catalog.providers?.length ?? 0}`);
-  } catch (err: any) {
-    fail("ServicePlane", "providerCredentials.listProviders", err.message);
-  }
-}
-
-async function testInferencePlane() {
-  console.log("\n--- Testing Zorveus (Inference Gateway Data Plane) ---");
-
-  if (!inferenceKey) {
-    fail("InferencePlane", "Environment", "Missing ZORVEUS_INFERENCE_KEY");
-    return;
-  }
-
-  const zorveus = new Zorveus({
-    apiKey: inferenceKey,
-    baseURL,
-    gatewayBaseURL
-  });
-
-  // 1. zorveus.getUsage()
-  try {
-    const usage = await zorveus.getUsage();
-    pass("InferencePlane", "zorveus.getUsage", `Spent: $${usage.spent_this_period}, Spend Cap: $${usage.spend_cap}, Balance: $${usage.remaining_balance}`);
-  } catch (err: any) {
-    fail("InferencePlane", "zorveus.getUsage", err.message);
-  }
-
-  // 2. zorveus.models.list()
-  let chosenModel = "gemini/gemini-2.5-flash";
-  try {
-    const models = await zorveus.models.list();
-    const count = models.data?.length ?? 0;
-    const foundFlash = models.data?.find((m) => m.id.includes("gemini-2.5-flash"))?.id;
-    if (foundFlash) {
-      chosenModel = foundFlash;
-    }
-    pass("InferencePlane", "zorveus.models.list", `Total models: ${count}, Selected for chat: ${chosenModel}`);
-  } catch (err: any) {
-    fail("InferencePlane", "zorveus.models.list", err.message);
-  }
-
-  // 3. zorveus.chat.completions.create (non-streaming with attribution)
-  try {
-    const completion = await zorveus.chat.completions.create({
-      model: chosenModel,
-      messages: [
-        { role: "system", content: "You are a short test assistant." },
-        { role: "user", content: "Return the single word: OK" }
-      ],
-      zorveusMetadata: {
-        externalUserId: "test_runner_ext",
-        productEndUserId: "test_runner_peu",
-        displayName: "Live Suite Runner",
-        userEmail: "suite@test.local"
-      }
-    });
-    const text = completion.choices?.[0]?.message?.content?.trim() ?? "";
-    pass("InferencePlane", "chat.completions.create (non-streaming)", `Model: ${completion.model}, Content: "${text}"`);
-  } catch (err: any) {
-    fail("InferencePlane", "chat.completions.create (non-streaming)", err.message);
-  }
-
-  // 4. zorveus.chat.completions.create (streaming SSE)
-  try {
-    const stream = await zorveus.chat.completions.create({
-      model: chosenModel,
-      messages: [{ role: "user", content: "Count 1, 2" }],
-      stream: true,
-      zorveusMetadata: {
-        externalUserId: "test_stream_runner"
-      }
-    });
-
-    let buffer = "";
-    for await (const chunk of stream) {
-      buffer += chunk.choices?.[0]?.delta?.content ?? "";
-    }
-    pass("InferencePlane", "chat.completions.create (streaming)", `Received chunks: "${buffer.trim()}"`);
-  } catch (err: any) {
-    fail("InferencePlane", "chat.completions.create (streaming)", err.message);
-  }
-}
-
-async function testAdaptersAndErrors() {
-  console.log("\n--- Testing Adapters & Error Handling ---");
-
-  // 1. ZorveusOpenAI Adapter initialization
-  try {
-    const adapter = new ZorveusOpenAI({
-      apiKey: inferenceKey || "zrv_test",
-      baseURL: gatewayBaseURL
-    });
-    const hasCreate = typeof adapter.chat?.completions?.create === "function";
-    pass("Adapters", "ZorveusOpenAI.chat.completions", `Completions function ready: ${hasCreate}`);
-  } catch (err: any) {
-    fail("Adapters", "ZorveusOpenAI", err.message);
-  }
-
-  // 2. parseZorveusGatewayError unpacks nested gateway payload
-  try {
-    const sampleGatewayPayload = {
-      status: 403,
-      error: {
-        provider_specific_fields: {
-          error: {
-            code: "zorveus_product_user_allowance_insufficient",
-            message: "Credit allowance depleted",
-            params: {
-              metric_name: "tokens",
-              credit_mode: "enforce",
-              available_allowance: "0.00"
-            }
-          }
-        }
-      }
-    };
-
-    const parsed: any = parseZorveusGatewayError(sampleGatewayPayload);
-    const isValid =
-      parsed?.code === "zorveus_product_user_allowance_insufficient" &&
-      parsed?.params?.metric_name === "tokens" &&
-      parsed?.params?.credit_mode === "enforce";
-
-    if (isValid) {
-      pass("ErrorHandling", "parseZorveusGatewayError", `Parsed code: ${parsed.code}, metric: ${parsed.params?.metric_name}`);
-    } else {
-      fail("ErrorHandling", "parseZorveusGatewayError", `Expected allowance error, received code=${parsed?.code}`);
-    }
-  } catch (err: any) {
-    fail("ErrorHandling", "parseZorveusGatewayError", err.message);
-  }
-
-  // 3. Live 401 AuthenticationError check
-  try {
-    const badClient = new ZorveusServiceClient({
-      apiKey: "zrv_svc_invalid_key_for_test",
+async function getServiceClient(): Promise<ZorveusServiceClient> {
+  if (!serviceClient) {
+    serviceClient = new ZorveusServiceClient({
+      apiKey: await requireValue("Service key", "ZORVEUS_SERVICE_KEY"),
       baseURL
     });
-    await badClient.productUsers.getByExternalId({ appId: "app_fake", externalUserId: "ext_fake" });
-    fail("ErrorHandling", "Live 401 AuthenticationError", "Expected 401 failure, but request succeeded");
-  } catch (err: any) {
-    const isAuth = err.status === 401 || err.name === "AuthenticationError" || err.code === "zorveus_missing_session";
-    if (isAuth) {
-      pass("ErrorHandling", "Live 401 AuthenticationError", `Caught expected auth error: ${err.name} (${err.status})`);
-    } else {
-      fail("ErrorHandling", "Live 401 AuthenticationError", `Unexpected error: ${err.message}`);
+  }
+  return serviceClient;
+}
+
+async function getAppId(): Promise<string> {
+  return requireValue("App ID", "ZORVEUS_APP_ID");
+}
+
+async function getExternalUserId(): Promise<string> {
+  return requireValue("External product user ID", "ZORVEUS_TEST_EXTERNAL_USER_ID");
+}
+
+async function selectModel(client: Zorveus): Promise<string> {
+  if (process.env.ZORVEUS_TEST_MODEL) return process.env.ZORVEUS_TEST_MODEL;
+  const models = await client.models.list({ routeStatus: "available" });
+  const model = await ask("Model", models.data[0]?.id);
+  if (!model) throw new Error("A model is required for this operation.");
+  return model;
+}
+
+async function testInferenceUsage(): Promise<void> {
+  const usage = await (await getInferenceClient()).getUsage();
+  console.table({
+    status: usage.status,
+    period: usage.period,
+    virtual_spend: usage.virtual_spend_this_period ?? usage.spent_this_period,
+    spend_cap: usage.spend_cap ?? "uncapped",
+    remaining_allowance: usage.remaining_balance ?? "unlimited",
+    currency: usage.currency
+  });
+}
+
+async function testModels(): Promise<void> {
+  const models = await (await getInferenceClient()).models.list({ routeStatus: "available" });
+  console.table(models.data.map(({ id, provider, mode, route_status }) => ({
+    id,
+    provider,
+    mode,
+    route_status
+  })));
+}
+
+async function testChat(): Promise<void> {
+  const client = await getInferenceClient();
+  const response = await client.chat.completions.create({
+    model: await selectModel(client),
+    messages: [{ role: "user", content: await ask("Prompt", "Reply with OK") }],
+    zorveusMetadata: { externalUserId: await getExternalUserId() }
+  });
+  console.log(response.choices[0]?.message?.content ?? "No content returned.");
+  console.table({
+    prompt_tokens: response.usage?.prompt_tokens ?? "not reported",
+    cached_tokens: response.usage?.prompt_tokens_details?.cached_tokens ?? "not reported",
+    completion_tokens: response.usage?.completion_tokens ?? "not reported"
+  });
+}
+
+async function testStreamingChat(): Promise<void> {
+  const client = await getInferenceClient();
+  const stream = await client.chat.completions.create({
+    model: await selectModel(client),
+    messages: [{ role: "user", content: await ask("Prompt", "Count from one to five") }],
+    stream: true,
+    zorveusMetadata: { externalUserId: await getExternalUserId() }
+  });
+  for await (const chunk of stream) output.write(chunk.choices[0]?.delta?.content ?? "");
+  output.write("\n");
+}
+
+async function testEmbeddings(): Promise<void> {
+  const response = await (await getInferenceClient()).embeddings.create({
+    model: await ask("Embedding model", process.env.ZORVEUS_EMBEDDING_MODEL || "text-embedding-3-small"),
+    input: await ask("Text to embed", "Zorveus SDK test"),
+    zorveusMetadata: { externalUserId: await getExternalUserId() }
+  });
+  console.table({ vectors: response.data.length, dimensions: response.data[0]?.embedding.length ?? 0 });
+}
+
+async function upsertProductUser(): Promise<void> {
+  const response = await (await getServiceClient()).productUsers.upsert({
+    appId: await getAppId(),
+    externalUserId: await getExternalUserId(),
+    displayName: await ask("Display name", "SDK Test User"),
+    email: await ask("Email", "sdk-test@example.com")
+  });
+  console.table({ created: response.created, product_end_user_id: response.product_user.product_end_user_id });
+}
+
+async function getProductUser(): Promise<void> {
+  const user = await (await getServiceClient()).productUsers.getByExternalId({
+    appId: await getAppId(),
+    externalUserId: await getExternalUserId()
+  });
+  console.dir(user, { depth: null });
+}
+
+async function getProductUserById(): Promise<void> {
+  const id = await requireValue("Product end-user ID", "ZORVEUS_TEST_PRODUCT_END_USER_ID");
+  console.dir(await (await getServiceClient()).productUsers.get(id), { depth: null });
+}
+
+async function listProductUsers(): Promise<void> {
+  const page = await (await getServiceClient()).productUsers.list({
+    appId: await getAppId(),
+    limit: Number(await ask("Limit", "20"))
+  });
+  console.table(page.product_users.map((user) => ({
+    product_end_user_id: user.product_end_user_id,
+    external_user_id: user.external_user_id,
+    status: user.status,
+    display_name: user.display_name
+  })));
+}
+
+async function grantCredit(): Promise<void> {
+  const response = await (await getServiceClient()).productUsers.grantCreditByExternalId({
+    appId: await getAppId(),
+    externalUserId: await getExternalUserId(),
+    amount: await ask("Credit amount as a decimal string", "1.000000000000"),
+    currency: await ask("Currency", "USD"),
+    source: "service_key",
+    reason: await ask("Reason", "SDK runner test grant")
+  });
+  console.table({
+    credit_grant_id: response.credit_grant.credit_grant_id,
+    amount: response.credit_grant.amount,
+    remaining_amount: response.credit_grant.remaining_amount
+  });
+}
+
+async function grantCreditById(): Promise<void> {
+  const id = await requireValue("Product end-user ID", "ZORVEUS_TEST_PRODUCT_END_USER_ID");
+  const response = await (await getServiceClient()).productUsers.grantCredit(id, {
+    appId: await getAppId(),
+    amount: await ask("Credit amount as a decimal string", "1.000000000000"),
+    currency: await ask("Currency", "USD"),
+    reason: await ask("Reason", "SDK runner test grant")
+  });
+  console.dir(response.credit_grant, { depth: null });
+}
+
+async function getCreditSummary(): Promise<void> {
+  const summary = await (await getServiceClient()).productUsers.getCreditSummaryByExternalId({
+    appId: await getAppId(),
+    externalUserId: await getExternalUserId(),
+    currency: await ask("Currency", "USD")
+  });
+  console.dir(summary, { depth: null });
+}
+
+async function listCreditGrants(): Promise<void> {
+  const response = await (await getServiceClient()).productUsers.listCreditGrantsByExternalId({
+    appId: await getAppId(),
+    externalUserId: await getExternalUserId(),
+    limit: Number(await ask("Limit", "20"))
+  });
+  console.table(response.credit_grants.map((grant) => ({
+    credit_grant_id: grant.credit_grant_id,
+    amount: grant.amount,
+    remaining_amount: grant.remaining_amount,
+    status: grant.status,
+    reason: grant.reason
+  })));
+}
+
+async function listCreditGrantsById(): Promise<void> {
+  const id = await requireValue("Product end-user ID", "ZORVEUS_TEST_PRODUCT_END_USER_ID");
+  const response = await (await getServiceClient()).productUsers.listCreditGrants(id, {
+    appId: await getAppId(),
+    limit: Number(await ask("Limit", "20"))
+  });
+  console.table(response.credit_grants);
+}
+
+async function revokeCredit(): Promise<void> {
+  const service = await getServiceClient();
+  const user = await service.productUsers.getByExternalId({
+    appId: await getAppId(),
+    externalUserId: await getExternalUserId()
+  });
+  const grantId = await requireValue("Credit grant ID", "ZORVEUS_TEST_CREDIT_GRANT_ID");
+  const response = await service.productUsers.revokeCredit(user.product_end_user_id, grantId);
+  console.table({ credit_grant_id: grantId, revoked: response.revoked });
+}
+
+async function listUsageEvents(): Promise<void> {
+  const response = await (await getServiceClient()).usageEvents.list({
+    appId: await getAppId(),
+    limit: Number(await ask("Limit", "20"))
+  });
+  console.table(response.events.map((event) => ({
+    request_id: event.zorveus_request_id,
+    model: event.model,
+    virtual_spend: event.virtual_spend,
+    wallet_charge: event.sell_cost,
+    cache_read_tokens: event.cache_read_input_tokens,
+    normal_input_tokens: normalInputTokens(event) ?? "unavailable",
+    status: event.status
+  })));
+  console.log(`More results: ${response.has_more}; next cursor: ${response.next_cursor ?? "none"}`);
+}
+
+async function listProviderCredentials(): Promise<void> {
+  const response = await (await getServiceClient()).providerCredentials.list();
+  console.table(response.provider_credentials.map((credential) => ({
+    id: credential.provider_credential_id,
+    provider: credential.provider,
+    name: credential.credential_name,
+    status: credential.status
+  })));
+}
+
+async function getProviderCredential(): Promise<void> {
+  const id = await requireValue("Provider credential ID", "ZORVEUS_TEST_PROVIDER_CREDENTIAL_ID");
+  console.dir(await (await getServiceClient()).providerCredentials.get(id), { depth: null });
+}
+
+async function createProviderCredential(): Promise<void> {
+  const response = await (await getServiceClient()).providerCredentials.create({
+    provider: await requireValue("Provider", "ZORVEUS_TEST_PROVIDER"),
+    credentialName: await ask("Credential name", `sdk-runner-${Date.now()}`),
+    apiKey: await requireValue("Disposable provider API key", "ZORVEUS_TEST_PROVIDER_API_KEY")
+  });
+  console.dir(response, { depth: null });
+}
+
+async function rotateProviderCredential(): Promise<void> {
+  const id = await requireValue("Provider credential ID", "ZORVEUS_TEST_PROVIDER_CREDENTIAL_ID");
+  const response = await (await getServiceClient()).providerCredentials.rotate(id, {
+    apiKey: await requireValue("New disposable provider API key", "ZORVEUS_TEST_PROVIDER_ROTATED_API_KEY")
+  });
+  console.dir(response, { depth: null });
+}
+
+async function deleteProviderCredential(): Promise<void> {
+  const id = await requireValue("Provider credential ID", "ZORVEUS_TEST_PROVIDER_CREDENTIAL_ID");
+  const confirmation = await ask(`Type ${id} to confirm deletion`);
+  if (confirmation !== id) throw new Error("Deletion cancelled.");
+  await (await getServiceClient()).providerCredentials.delete(id);
+  console.log(`Deleted ${id}.`);
+}
+
+async function listProviders(): Promise<void> {
+  console.table((await (await getServiceClient()).providerCredentials.listProviders()).providers);
+}
+
+async function testAdapters(): Promise<void> {
+  const apiKey = await requireValue("Inference key", "ZORVEUS_INFERENCE_KEY");
+  const openai = new ZorveusOpenAI({ apiKey, baseURL: gatewayBaseURL });
+  const vercel = createZorveus({ apiKey, baseURL: gatewayBaseURL });
+  console.table({
+    openai_chat: typeof openai.chat.completions.create === "function",
+    openai_responses: typeof openai.responses?.create === "function",
+    vercel_provider: typeof vercel === "function"
+  });
+}
+
+async function testErrorParser(): Promise<void> {
+  const parsed = parseZorveusGatewayError({
+    status: 403,
+    error: {
+      provider_specific_fields: {
+        error: {
+          code: "zorveus_product_user_allowance_insufficient",
+          message: "Allowance exhausted",
+          params: { shortfall: "1.000000000000" }
+        }
+      }
     }
+  });
+  console.dir(parsed, { depth: null });
+}
+
+interface RunnerAction {
+  name: string;
+  run: () => Promise<void>;
+}
+
+const actions: RunnerAction[] = [
+  { name: "Get inference-key usage", run: testInferenceUsage },
+  { name: "List available models", run: testModels },
+  { name: "Create one chat completion", run: testChat },
+  { name: "Create one streaming chat completion", run: testStreamingChat },
+  { name: "Create one embedding", run: testEmbeddings },
+  { name: "Create or update a product user", run: upsertProductUser },
+  { name: "Get product-user details", run: getProductUser },
+  { name: "Get a product user by internal ID", run: getProductUserById },
+  { name: "List product users", run: listProductUsers },
+  { name: "Give a credit grant by external ID", run: grantCredit },
+  { name: "Give a credit grant by internal ID", run: grantCreditById },
+  { name: "Get a credit summary", run: getCreditSummary },
+  { name: "List credit grants by external ID", run: listCreditGrants },
+  { name: "List credit grants by internal ID", run: listCreditGrantsById },
+  { name: "Revoke one credit grant", run: revokeCredit },
+  { name: "List cache-aware usage events", run: listUsageEvents },
+  { name: "List provider credentials", run: listProviderCredentials },
+  { name: "Get one provider credential", run: getProviderCredential },
+  { name: "Create a provider credential", run: createProviderCredential },
+  { name: "Rotate a provider credential", run: rotateProviderCredential },
+  { name: "Delete a provider credential", run: deleteProviderCredential },
+  { name: "List supported providers", run: listProviders },
+  { name: "Check the OpenAI and Vercel adapters", run: testAdapters },
+  { name: "Check finance error parsing", run: testErrorParser }
+];
+
+function printMenu(): void {
+  console.log("\nZorveus SDK runner\n");
+  actions.forEach((action, index) => console.log(`${index + 1}. ${action.name}`));
+  console.log("a. Run all listed tests in order");
+  console.log("q. Quit");
+}
+
+async function runAction(action: RunnerAction): Promise<void> {
+  console.log(`\n--- ${action.name} ---`);
+  try {
+    await action.run();
+    console.log("PASS");
+  } catch (error) {
+    console.error(`FAIL: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-async function main() {
-  console.log("==================================================");
-  console.log("Zorveus Live Functions Test Suite");
-  console.log(`Backend Base URL: ${baseURL}`);
-  console.log(`Gateway Base URL: ${gatewayBaseURL}`);
-  console.log("==================================================");
+async function main(): Promise<void> {
+  console.log(`Control plane: ${baseURL}`);
+  console.log(`Gateway: ${gatewayBaseURL}`);
 
-  await testServicePlane();
-  await testInferencePlane();
-  await testAdaptersAndErrors();
+  while (true) {
+    printMenu();
+    const selection = (await rl.question("\nChoose a test: ")).trim().toLowerCase();
+    if (selection === "q") break;
 
-  const total = checks.length;
-  const passed = checks.filter((c) => c.ok).length;
-  const failed = total - passed;
+    const selectedActions = selection === "a"
+      ? actions
+      : selection.split(",").map((value) => actions[Number(value.trim()) - 1]);
 
-  console.log("\n==================================================");
-  console.log("Summary");
-  console.log(`Total:  ${total}`);
-  console.log(`Passed: ${passed}`);
-  console.log(`Failed: ${failed}`);
-  console.log("==================================================");
+    if (selectedActions.length === 0 || selectedActions.some((action) => !action)) {
+      console.error("Choose one or more listed numbers, a, or q.");
+      continue;
+    }
+
+    for (const action of selectedActions) await runAction(action);
+  }
+
+  rl.close();
 }
 
 void main();

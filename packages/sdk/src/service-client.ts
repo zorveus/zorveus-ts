@@ -1,6 +1,7 @@
 import { HTTPTransport } from "./http/transport";
 import { ProductUsers } from "./resources/product-users";
 import { ProviderCredentials } from "./resources/provider-credentials";
+import { UsageEvents } from "./resources/usage-events";
 import type { ZorveusServiceClientOptions } from "./types/client";
 
 /**
@@ -11,6 +12,7 @@ import type { ZorveusServiceClientOptions } from "./types/client";
 export class ZorveusServiceClient {
   readonly productUsers: ProductUsers;
   readonly providerCredentials: ProviderCredentials;
+  readonly usageEvents: UsageEvents;
   protected readonly transport: HTTPTransport;
 
   constructor(options: ZorveusServiceClientOptions) {
@@ -33,5 +35,6 @@ export class ZorveusServiceClient {
 
     this.productUsers = new ProductUsers(this.transport);
     this.providerCredentials = new ProviderCredentials(this.transport);
+    this.usageEvents = new UsageEvents(this.transport);
   }
 }

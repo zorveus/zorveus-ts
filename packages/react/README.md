@@ -67,8 +67,8 @@ export function AIStudio() {
         <div style={{ marginTop: 24 }}>
           {usage && (
             <SpendCapIndicator
-              current={parseFloat(usage.spent_this_period)}
-              limit={parseFloat(usage.spend_cap)}
+              current={usage.virtual_spend_this_period ?? usage.spent_this_period}
+              limit={usage.spend_cap}
               period={usage.period}
             />
           )}
@@ -129,7 +129,9 @@ export function AIStudio() {
 | `useZorveusAuth()` | `{ isConnected, accessToken, error, connect, disconnect, connectionId }` | Accesses connection state and triggers OAuth PKCE connect/disconnect flows |
 | `useZorveusInference(options)` | `{ messages, isStreaming, submitPrompt, stopStreaming, clearMessages, error }` | Manages streaming inference, token accumulation, and message history |
 | `useZorveusModels(options)` | `{ models, isLoading, error, refetch }` | Queries accessible models (`GET /v1/models?route_status=available`) |
-| `useZorveusSpend(options)` | `{ usage, isLoading, error, refetch }` | Queries live spending, budget caps, and balances (`GET /inference-keys/usage`) |
+| `useZorveusSpend(options)` | `{ usage, spentDecimal, spendCapDecimal, remainingBalanceDecimal, isLoading, error, refresh }` | Queries live virtual spend, the base cap, and the remaining base allowance (`GET /inference-keys/usage`) |
+
+Use the `*Decimal` fields for financial calculations. The numeric aliases remain for backward compatibility and can lose precision.
 | `useZorveusContext()` | `{ client, isConnected, accessToken, ... }` | Direct access to the raw Zorveus context and initialized `@zorveus/sdk` client |
 
 ## Provider configuration options

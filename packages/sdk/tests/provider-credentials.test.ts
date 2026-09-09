@@ -36,4 +36,32 @@ describe("Provider Credentials Management", () => {
     expect(res.provider_credentials).toHaveLength(1);
     expect(res.provider_credentials[0].provider).toBe("openai");
   });
+
+  it("gets one provider credential by ID", async () => {
+    const mockCredential = {
+      provider_credential_id: "cred_123",
+      org_id: "org_456",
+      provider: "openai",
+      credential_name: "Production OpenAI",
+      status: "active",
+      routing_mode: "auto_resolve",
+      routing_priority: 100,
+      default_model_policy: [],
+      provider_config: null,
+      active_secret_version_id: "sec_v1",
+      secret_fingerprint: "fp_abc",
+      last_validated_at: null,
+      last_used_at: null
+    };
+    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(mockCredential)));
+
+    const client = new ZorveusServiceClient({ apiKey: "zrv_service_key_123" });
+    const credential = await client.providerCredentials.get("cred_123");
+
+    expect(credential.provider).toBe("openai");
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://api.zorveus.com/provider-credentials/org-programmatic/cred_123",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
 });

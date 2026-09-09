@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { AuthenticationError, type InferenceKeyUsageResponse, type ZorveusError } from "@zorveus/sdk";
+import {
+  AuthenticationError,
+  formatDecimalString,
+  type InferenceKeyUsageResponse,
+  type ZorveusError
+} from "@zorveus/sdk";
 import { useOptionalZorveusContext } from "../context/ZorveusContext";
 
 export interface UseZorveusSpendOptions {
@@ -8,6 +13,7 @@ export interface UseZorveusSpendOptions {
 
 export interface UseZorveusSpendReturn {
   usage: InferenceKeyUsageResponse | null;
+  spentDecimal: string;
   /**
    * Reference-priced virtual spend recorded on this key during the current period.
    */
@@ -17,11 +23,13 @@ export interface UseZorveusSpendReturn {
    * Base virtual allowance cap on this key (null if uncapped).
    */
   spendCap: number | null;
+  spendCapDecimal: string | null;
   spendCapFormatted: string | null;
   /**
    * Remaining base virtual allowance on this key (null if uncapped).
    */
   remainingBalance: number | null;
+  remainingBalanceDecimal: string | null;
   remainingBalanceFormatted: string | null;
   currency: string;
   period: string;
@@ -96,18 +104,28 @@ export function useZorveusSpend(options: UseZorveusSpendOptions = {}): UseZorveu
     }
   }, [autoFetch, fetchUsage]);
 
-  const spent = usage?.spent_this_period ? parseFloat(usage.spent_this_period) : 0;
-  const spendCap = usage?.spend_cap ? parseFloat(usage.spend_cap) : null;
-  const remainingBalance = usage?.remaining_balance ? parseFloat(usage.remaining_balance) : null;
+  const spentDecimal = usage?.virtual_spend_this_period ?? usage?.spent_this_period ?? "0";
+  const spendCapDecimal = usage?.spend_cap ?? null;
+  const remainingBalanceDecimal = usage?.remaining_balance ?? null;
+
+  // Numeric aliases remain for compatibility. Use the Decimal fields for money calculations.
+  const spent = Number(spentDecimal);
+  const spendCap = spendCapDecimal === null ? null : Number(spendCapDecimal);
+  const remainingBalance = remainingBalanceDecimal === null ? null : Number(remainingBalanceDecimal);
 
   return {
     usage,
+    spentDecimal,
     spent,
-    spentFormatted: spent.toFixed(2),
+    spentFormatted: formatDecimalString(spentDecimal),
+    spendCapDecimal,
     spendCap,
-    spendCapFormatted: spendCap !== null ? spendCap.toFixed(2) : null,
+    spendCapFormatted: spendCapDecimal !== null ? formatDecimalString(spendCapDecimal) : null,
+    remainingBalanceDecimal,
     remainingBalance,
-    remainingBalanceFormatted: remainingBalance !== null ? remainingBalance.toFixed(2) : null,
+    remainingBalanceFormatted: remainingBalanceDecimal !== null
+      ? formatDecimalString(remainingBalanceDecimal)
+      : null,
     currency: usage?.currency || "USD",
     period: usage?.period || "monthly",
     resetAt: usage?.reset_at || null,

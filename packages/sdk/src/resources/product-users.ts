@@ -141,6 +141,7 @@ export class ProductUsers {
   ): Promise<ProductUserListResponse> {
     const query: Record<string, unknown> = {};
     if (params.orgId) query.org_id = params.orgId;
+    if (params.appId) query.app_id = params.appId;
     if (params.limit !== undefined) query.limit = params.limit;
     if (params.offset !== undefined) query.offset = params.offset;
 

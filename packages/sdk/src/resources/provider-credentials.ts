@@ -70,6 +70,17 @@ export class ProviderCredentials {
     );
   }
 
+  /** Retrieves one BYOK provider credential by ID. */
+  async get(
+    providerCredentialId: string,
+    options: RequestOptions = {}
+  ): Promise<ProviderCredentialResponse> {
+    return this.transport.request<ProviderCredentialResponse>(
+      `/provider-credentials/org-programmatic/${encodeURIComponent(providerCredentialId)}`,
+      { method: "GET", ...options }
+    );
+  }
+
   /**
    * Rotates a provider credential secret (`POST /provider-credentials/org-programmatic/{id}/rotate`).
    */
