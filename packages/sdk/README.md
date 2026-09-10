@@ -82,6 +82,8 @@ const completion = await openai.chat.completions.create({
 });
 ```
 
+Constructor attribution applies to every JSON and multipart inference request made through `ZorveusOpenAI`. This includes chat, Responses, speech, transcription, translation, images, moderation, and file uploads. Read-only requests such as file listing do not create attributed usage.
+
 ### Vercel AI SDK integration (`createZorveus`)
 
 If your project uses Vercel AI SDK (`ai` and `@ai-sdk/openai`), import `createZorveus` from `@zorveus/sdk/vercel`:

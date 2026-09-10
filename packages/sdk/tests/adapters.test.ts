@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { ZorveusOpenAI } from "../src/adapters/openai";
 import { createZorveus } from "../src/adapters/vercel";
+import { toFile } from "openai";
 
 describe("OpenAI SDK Adapter (ZorveusOpenAI)", () => {
   it("automatically injects metadata.external_user_id and product_user attribution into request body", async () => {
@@ -118,6 +119,58 @@ describe("OpenAI SDK Adapter (ZorveusOpenAI)", () => {
       expect(capturedBody.metadata).toBeDefined();
       expect(capturedBody.metadata.external_user_id).toBe("usr_sara_101");
     }
+  });
+
+  it("injects attribution into speech JSON requests", async () => {
+    let capturedBody: Record<string, any> | undefined;
+    const customFetch = vi.fn().mockImplementation(async (_url, init) => {
+      capturedBody = JSON.parse(init?.body as string);
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "Content-Type": "audio/mpeg" }
+      });
+    });
+    const openai = new ZorveusOpenAI({
+      apiKey: "zrv_live_test_key_123",
+      externalUserId: "usr_audio_123",
+      productEndUserId: "peu_audio_123",
+      fetch: customFetch
+    });
+
+    await openai.audio.speech.create({ model: "tts-1", voice: "alloy", input: "Hello" });
+
+    expect(capturedBody?.metadata).toMatchObject({
+      external_user_id: "usr_audio_123",
+      product_end_user_id: "peu_audio_123"
+    });
+  });
+
+  it("injects attribution into multipart audio requests", async () => {
+    let capturedMetadata: Record<string, unknown> | undefined;
+    const customFetch = vi.fn().mockImplementation(async (_url, init) => {
+      const form = init?.body as FormData;
+      capturedMetadata = JSON.parse(String(form.get("metadata")));
+      return new Response(JSON.stringify({ text: "Hello" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    });
+    const openai = new ZorveusOpenAI({
+      apiKey: "zrv_live_test_key_123",
+      externalUserId: "usr_audio_123",
+      displayName: "Audio User",
+      fetch: customFetch
+    });
+
+    await openai.audio.transcriptions.create({
+      model: "whisper-1",
+      file: await toFile(Buffer.from("test audio"), "test.wav")
+    });
+
+    expect(capturedMetadata).toMatchObject({
+      external_user_id: "usr_audio_123",
+      product_user: { display_name: "Audio User" }
+    });
   });
 });
 

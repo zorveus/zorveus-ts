@@ -317,7 +317,7 @@ async function testOpenAIResponses(): Promise<void> {
 }
 
 async function generateSpeech(): Promise<void> {
-  const client = await getOpenAIAdapter();
+  const client = await getOpenAIAdapter(true);
   const format = await ask("Audio format", "mp3");
   const response = await client.audio.speech.create({
     model: await ask(
@@ -337,7 +337,7 @@ async function generateSpeech(): Promise<void> {
 async function transcribeAudio(): Promise<void> {
   const audioPath = path.resolve(await requireValue("Audio file path", "ZORVEUS_TEST_AUDIO_PATH"));
   if (!fs.existsSync(audioPath)) throw new Error(`Audio file not found: ${audioPath}`);
-  const response = await (await getOpenAIAdapter()).audio.transcriptions.create({
+  const response = await (await getOpenAIAdapter(true)).audio.transcriptions.create({
     model: await ask("Transcription model", process.env.ZORVEUS_TRANSCRIPTION_MODEL || "whisper-1"),
     file: fs.createReadStream(audioPath)
   });
@@ -347,7 +347,7 @@ async function transcribeAudio(): Promise<void> {
 async function translateAudio(): Promise<void> {
   const audioPath = path.resolve(await requireValue("Audio file path", "ZORVEUS_TEST_AUDIO_PATH"));
   if (!fs.existsSync(audioPath)) throw new Error(`Audio file not found: ${audioPath}`);
-  const response = await (await getOpenAIAdapter()).audio.translations.create({
+  const response = await (await getOpenAIAdapter(true)).audio.translations.create({
     model: await ask("Translation model", process.env.ZORVEUS_TRANSLATION_MODEL || "whisper-1"),
     file: fs.createReadStream(audioPath)
   });
@@ -355,7 +355,7 @@ async function translateAudio(): Promise<void> {
 }
 
 async function generateImage(): Promise<void> {
-  const response = await (await getOpenAIAdapter()).images.generate({
+  const response = await (await getOpenAIAdapter(true)).images.generate({
     model: await ask("Image model", process.env.ZORVEUS_IMAGE_MODEL || "dall-e-3"),
     prompt: await ask("Image prompt", "A geometric illustration of an AI gateway"),
     n: 1,
@@ -374,7 +374,7 @@ async function generateImage(): Promise<void> {
 }
 
 async function moderateContent(): Promise<void> {
-  const response = await (await getOpenAIAdapter()).moderations.create({
+  const response = await (await getOpenAIAdapter(true)).moderations.create({
     model: await ask("Moderation model", process.env.ZORVEUS_MODERATION_MODEL || "omni-moderation-latest"),
     input: await ask("Content", "Check this text for safety.")
   });
