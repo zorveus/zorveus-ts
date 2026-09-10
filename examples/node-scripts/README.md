@@ -7,7 +7,7 @@ Standalone TypeScript scripts demonstrating `@zorveus/sdk` in Node.js backend en
 1. **`inference-demo.ts`**: Compatibility entry point for the interactive SDK runner.
 2. **`management-demo.ts`**: Compatibility entry point for the interactive SDK runner.
 3. **`oauth-pkce-demo.ts`**: OAuth 2.0 PKCE authorization URL generation, state validation, and token exchange.
-4. **`test-all.ts`**: Interactive SDK runner. Choose one operation by number, choose several with comma-separated numbers, or choose all.
+4. **`test-all.ts`**: Interactive SDK runner. Choose one operation by number, several with comma-separated numbers, all read-only operations, or every operation with confirmation.
 
 ## How to run
 
@@ -53,6 +53,8 @@ npm run demo:runner
 ```
 
 Provider credential creation, rotation, and deletion are separate menu options. Deletion requires typing the credential ID again. The OAuth demo remains separate because it requires browser authorization. Set `ZORVEUS_REVOKE_OAUTH_TOKEN=true` to revoke the issued OAuth token at the end.
+
+The OpenAI adapter menu includes Responses, text-to-speech, transcription, translation, image generation, moderation, and file listing. Generated audio and images default to `examples/output/`.
 
 > [!NOTE]
 > `oauth-pkce-demo.ts` passes `scopes: ["inference:write", "models:*"]`. The Zorveus OAuth consent backend requires at least one model scope (`models:*`) to grant user inference authorization.

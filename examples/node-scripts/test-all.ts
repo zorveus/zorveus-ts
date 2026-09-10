@@ -298,6 +298,101 @@ async function listProviders(): Promise<void> {
   console.table((await (await getServiceClient()).providerCredentials.listProviders()).providers);
 }
 
+async function getOpenAIAdapter(withAttribution = false): Promise<ZorveusOpenAI> {
+  return new ZorveusOpenAI({
+    apiKey: await requireValue("Inference key", "ZORVEUS_INFERENCE_KEY"),
+    baseURL: gatewayBaseURL,
+    ...(withAttribution ? { externalUserId: await getExternalUserId() } : {})
+  });
+}
+
+async function testOpenAIResponses(): Promise<void> {
+  const client = await getOpenAIAdapter(true);
+  const response = await client.responses.create({
+    model: await ask("Model", process.env.ZORVEUS_TEST_MODEL || "openai/gpt-4.1-mini"),
+    input: await ask("Prompt", "Reply with OK")
+  });
+  console.log(response.output_text || "No text returned.");
+  console.dir(response, { depth: 3 });
+}
+
+async function generateSpeech(): Promise<void> {
+  const client = await getOpenAIAdapter();
+  const format = await ask("Audio format", "mp3");
+  const response = await client.audio.speech.create({
+    model: await ask(
+      "Speech model",
+      process.env.ZORVEUS_SPEECH_MODEL || "gemini/gemini-2.5-flash-preview-tts"
+    ),
+    voice: await ask("Voice", "achird"),
+    input: await ask("Text", "Hello from the Zorveus TypeScript SDK."),
+    response_format: format as "mp3"
+  });
+  const outputPath = path.resolve(await ask("Output audio path", `examples/output/speech.${format}`));
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, Buffer.from(await response.arrayBuffer()));
+  console.log(`Saved speech audio to ${outputPath}`);
+}
+
+async function transcribeAudio(): Promise<void> {
+  const audioPath = path.resolve(await requireValue("Audio file path", "ZORVEUS_TEST_AUDIO_PATH"));
+  if (!fs.existsSync(audioPath)) throw new Error(`Audio file not found: ${audioPath}`);
+  const response = await (await getOpenAIAdapter()).audio.transcriptions.create({
+    model: await ask("Transcription model", process.env.ZORVEUS_TRANSCRIPTION_MODEL || "whisper-1"),
+    file: fs.createReadStream(audioPath)
+  });
+  console.dir(response, { depth: null });
+}
+
+async function translateAudio(): Promise<void> {
+  const audioPath = path.resolve(await requireValue("Audio file path", "ZORVEUS_TEST_AUDIO_PATH"));
+  if (!fs.existsSync(audioPath)) throw new Error(`Audio file not found: ${audioPath}`);
+  const response = await (await getOpenAIAdapter()).audio.translations.create({
+    model: await ask("Translation model", process.env.ZORVEUS_TRANSLATION_MODEL || "whisper-1"),
+    file: fs.createReadStream(audioPath)
+  });
+  console.dir(response, { depth: null });
+}
+
+async function generateImage(): Promise<void> {
+  const response = await (await getOpenAIAdapter()).images.generate({
+    model: await ask("Image model", process.env.ZORVEUS_IMAGE_MODEL || "dall-e-3"),
+    prompt: await ask("Image prompt", "A geometric illustration of an AI gateway"),
+    n: 1,
+    size: await ask("Image size", "1024x1024") as "1024x1024",
+    response_format: "b64_json"
+  });
+  const image = response.data?.[0];
+  if (image?.b64_json) {
+    const outputPath = path.resolve(await ask("Output image path", "examples/output/generated-image.png"));
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, Buffer.from(image.b64_json, "base64"));
+    console.log(`Saved generated image to ${outputPath}`);
+    return;
+  }
+  console.log(image?.url ? `Generated image URL: ${image.url}` : "No image returned.");
+}
+
+async function moderateContent(): Promise<void> {
+  const response = await (await getOpenAIAdapter()).moderations.create({
+    model: await ask("Moderation model", process.env.ZORVEUS_MODERATION_MODEL || "omni-moderation-latest"),
+    input: await ask("Content", "Check this text for safety.")
+  });
+  console.dir(response, { depth: null });
+}
+
+async function listGatewayFiles(): Promise<void> {
+  const limit = Number(await ask("File limit", "20"));
+  const page = await (await getOpenAIAdapter()).files.list({ limit });
+  console.table(page.data.map((file) => ({
+    id: file.id,
+    filename: file.filename,
+    purpose: file.purpose,
+    bytes: file.bytes,
+    status: file.status
+  })));
+}
+
 async function testAdapters(): Promise<void> {
   const apiKey = await requireValue("Inference key", "ZORVEUS_INFERENCE_KEY");
   const openai = new ZorveusOpenAI({ apiKey, baseURL: gatewayBaseURL });
@@ -328,39 +423,50 @@ async function testErrorParser(): Promise<void> {
 interface RunnerAction {
   name: string;
   run: () => Promise<void>;
+  changesData?: boolean;
 }
 
 const actions: RunnerAction[] = [
   { name: "Get inference-key usage", run: testInferenceUsage },
   { name: "List available models", run: testModels },
-  { name: "Create one chat completion", run: testChat },
-  { name: "Create one streaming chat completion", run: testStreamingChat },
-  { name: "Create one embedding", run: testEmbeddings },
-  { name: "Create or update a product user", run: upsertProductUser },
+  { name: "Create one chat completion", run: testChat, changesData: true },
+  { name: "Create one streaming chat completion", run: testStreamingChat, changesData: true },
+  { name: "Create one embedding", run: testEmbeddings, changesData: true },
+  { name: "Create or update a product user", run: upsertProductUser, changesData: true },
   { name: "Get product-user details", run: getProductUser },
   { name: "Get a product user by internal ID", run: getProductUserById },
   { name: "List product users", run: listProductUsers },
-  { name: "Give a credit grant by external ID", run: grantCredit },
-  { name: "Give a credit grant by internal ID", run: grantCreditById },
+  { name: "Give a credit grant by external ID", run: grantCredit, changesData: true },
+  { name: "Give a credit grant by internal ID", run: grantCreditById, changesData: true },
   { name: "Get a credit summary", run: getCreditSummary },
   { name: "List credit grants by external ID", run: listCreditGrants },
   { name: "List credit grants by internal ID", run: listCreditGrantsById },
-  { name: "Revoke one credit grant", run: revokeCredit },
+  { name: "Revoke one credit grant", run: revokeCredit, changesData: true },
   { name: "List cache-aware usage events", run: listUsageEvents },
   { name: "List provider credentials", run: listProviderCredentials },
   { name: "Get one provider credential", run: getProviderCredential },
-  { name: "Create a provider credential", run: createProviderCredential },
-  { name: "Rotate a provider credential", run: rotateProviderCredential },
-  { name: "Delete a provider credential", run: deleteProviderCredential },
+  { name: "Create a provider credential", run: createProviderCredential, changesData: true },
+  { name: "Rotate a provider credential", run: rotateProviderCredential, changesData: true },
+  { name: "Delete a provider credential", run: deleteProviderCredential, changesData: true },
   { name: "List supported providers", run: listProviders },
   { name: "Check the OpenAI and Vercel adapters", run: testAdapters },
+  { name: "Create an OpenAI Responses response", run: testOpenAIResponses, changesData: true },
+  { name: "Generate speech audio", run: generateSpeech, changesData: true },
+  { name: "Transcribe an audio file", run: transcribeAudio, changesData: true },
+  { name: "Translate an audio file", run: translateAudio, changesData: true },
+  { name: "Generate an image", run: generateImage, changesData: true },
+  { name: "Moderate content", run: moderateContent, changesData: true },
+  { name: "List gateway files", run: listGatewayFiles },
   { name: "Check finance error parsing", run: testErrorParser }
 ];
 
 function printMenu(): void {
   console.log("\nZorveus SDK runner\n");
-  actions.forEach((action, index) => console.log(`${index + 1}. ${action.name}`));
-  console.log("a. Run all listed tests in order");
+  actions.forEach((action, index) => {
+    console.log(`${index + 1}. ${action.name}${action.changesData ? " [changes data or creates usage]" : ""}`);
+  });
+  console.log("s. Run all read-only tests");
+  console.log("a. Run every test, with confirmation");
   console.log("q. Quit");
 }
 
@@ -383,16 +489,27 @@ async function main(): Promise<void> {
     const selection = (await rl.question("\nChoose a test: ")).trim().toLowerCase();
     if (selection === "q") break;
 
-    const selectedActions = selection === "a"
-      ? actions
-      : selection.split(",").map((value) => actions[Number(value.trim()) - 1]);
+    let selectedActions: Array<RunnerAction | undefined>;
+    if (selection === "s") {
+      selectedActions = actions.filter((action) => !action.changesData);
+    } else if (selection === "a") {
+      const confirmation = await ask("Type RUN ALL to create usage and change data");
+      if (confirmation !== "RUN ALL") {
+        console.log("Run-all cancelled.");
+        continue;
+      }
+      selectedActions = actions;
+    } else {
+      selectedActions = selection.split(",").map((value) => actions[Number(value.trim()) - 1]);
+    }
 
-    if (selectedActions.length === 0 || selectedActions.some((action) => !action)) {
-      console.error("Choose one or more listed numbers, a, or q.");
+    const runnableActions = selectedActions.filter((action): action is RunnerAction => Boolean(action));
+    if (runnableActions.length === 0 || runnableActions.length !== selectedActions.length) {
+      console.error("Choose one or more listed numbers, s, a, or q.");
       continue;
     }
 
-    for (const action of selectedActions) await runAction(action);
+    for (const action of runnableActions) await runAction(action);
   }
 
   rl.close();
