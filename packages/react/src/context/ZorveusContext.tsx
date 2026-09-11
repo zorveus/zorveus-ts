@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useMemo, useEffect } from "react";
+import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from "react";
 import { Zorveus } from "@zorveus/sdk";
 import { ZorveusOpenAI } from "@zorveus/sdk/openai";
 
@@ -229,7 +229,7 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
     };
   }, [props.tokenProvider]);
 
-  const setOAuthSession = (session: ZorveusOAuthSessionPayload) => {
+  const setOAuthSession = useCallback((session: ZorveusOAuthSessionPayload) => {
     const newState: ZorveusAuthState = {
       isConnected: true,
       accessToken: session.access_token,
@@ -248,9 +248,9 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
         // Ignore storage write errors
       }
     }
-  };
+  }, [persistToken]);
 
-  const clearOAuthSession = () => {
+  const clearOAuthSession = useCallback(() => {
     setAuthState({
       isConnected: false,
       accessToken: null,
@@ -267,7 +267,7 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
         // Ignore storage remove errors
       }
     }
-  };
+  }, [persistToken]);
 
   // Create memoized Zorveus Inference Gateway client
   const client = useMemo(() => {
@@ -297,7 +297,7 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
     }
   }, [authState.accessToken, authState.apiBase, inferenceKey, resolvedGatewayBaseURL]);
 
-  const value: ZorveusContextValue = {
+  const value: ZorveusContextValue = useMemo(() => ({
     ...authState,
     isConnected: Boolean(authState.accessToken || inferenceKey),
     clientId,
@@ -310,7 +310,19 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
     openAIClient,
     setOAuthSession,
     clearOAuthSession
-  };
+  }), [
+    authState,
+    inferenceKey,
+    clientId,
+    clientSecret,
+    redirectUri,
+    resolvedBaseURL,
+    resolvedGatewayBaseURL,
+    client,
+    openAIClient,
+    setOAuthSession,
+    clearOAuthSession
+  ]);
 
   return <ZorveusContext.Provider value={value}>{children}</ZorveusContext.Provider>;
 }

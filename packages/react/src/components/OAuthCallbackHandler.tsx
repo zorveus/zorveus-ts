@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { ZorveusOAuth, type OAuthTokenResponse } from "@zorveus/sdk";
 import { useOptionalZorveusContext } from "../context/ZorveusContext";
 
@@ -25,8 +25,19 @@ export function OAuthCallbackHandler({
   const [exchangeState, setExchangeState] = useState<"idle" | "exchanging" | "done" | "error">("idle");
   const [exchangeError, setExchangeError] = useState<string | null>(null);
 
+  const hasStartedRef = useRef(false);
+  const contextRef = useRef(context);
+  contextRef.current = context;
+
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
+
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (hasStartedRef.current) return;
 
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get("code");
@@ -38,8 +49,10 @@ export function OAuthCallbackHandler({
       return;
     }
 
+    hasStartedRef.current = true;
+
     if (error) {
-      onError?.(error, errorDescription);
+      onErrorRef.current?.(error, errorDescription);
       setExchangeError(errorDescription || error);
       setExchangeState("error");
       return;
@@ -76,7 +89,7 @@ export function OAuthCallbackHandler({
       }
 
       if (code) {
-        onSuccess?.(code, state);
+        onSuccessRef.current?.(code, state);
       }
 
       setTimeout(() => {
@@ -91,12 +104,13 @@ export function OAuthCallbackHandler({
     }
 
     // Mode B: Direct SPA Redirect Flow (no window.opener)
-    if (!code || !context) return;
+    const ctx = contextRef.current;
+    if (!code || !ctx) return;
 
     const codeVerifier = window.sessionStorage.getItem("zorveus_oauth_verifier");
     if (!codeVerifier) {
       const msg = "Missing OAuth PKCE code verifier in session storage.";
-      onError?.("missing_verifier", msg);
+      onErrorRef.current?.("missing_verifier", msg);
       setExchangeError(msg);
       setExchangeState("error");
       return;
@@ -104,21 +118,28 @@ export function OAuthCallbackHandler({
 
     setExchangeState("exchanging");
 
+    // Clean query parameters from URL so refreshes do not re-process the consumed code
+    try {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch {
+      // Ignore history update errors
+    }
+
     ZorveusOAuth.exchangeToken({
-      clientId: context.clientId,
-      clientSecret: context.clientSecret,
+      clientId: ctx.clientId,
+      clientSecret: ctx.clientSecret,
       code,
       codeVerifier,
-      redirectUri: context.redirectUri,
-      baseURL: context.authBaseUrl
+      redirectUri: ctx.redirectUri,
+      baseURL: ctx.authBaseUrl
     })
       .then((tokenRes: OAuthTokenResponse) => {
         window.sessionStorage.removeItem("zorveus_oauth_verifier");
         window.sessionStorage.removeItem("zorveus_oauth_state");
 
-        context.setOAuthSession(tokenRes);
+        ctx.setOAuthSession(tokenRes);
         setExchangeState("done");
-        onSuccess?.(code, state, tokenRes);
+        onSuccessRef.current?.(code, state, tokenRes);
 
         if (redirectTo && typeof window !== "undefined") {
           window.location.replace(redirectTo);
@@ -128,9 +149,9 @@ export function OAuthCallbackHandler({
         const e = err instanceof Error ? err.message : String(err);
         setExchangeError(e);
         setExchangeState("error");
-        onError?.("exchange_failed", e);
+        onErrorRef.current?.("exchange_failed", e);
       });
-  }, [context, onSuccess, onError, redirectTo]);
+  }, [redirectTo]);
 
   if (typeof window === "undefined") return null;
 
@@ -139,7 +160,7 @@ export function OAuthCallbackHandler({
   const error = urlParams.get("error");
   const errorDescription = urlParams.get("error_description");
 
-  if (!code && !error) return null;
+  if (!code && !error && exchangeState === "idle") return null;
 
   const displayError = errorDescription || error || exchangeError;
   const isPending = exchangeState === "exchanging";
