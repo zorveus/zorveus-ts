@@ -148,23 +148,6 @@ async function getProductUser(): Promise<void> {
   console.dir(user, { depth: null });
 }
 
-async function getProductUserById(): Promise<void> {
-  const id = await requireValue("Product end-user ID", "ZORVEUS_TEST_PRODUCT_END_USER_ID");
-  console.dir(await (await getServiceClient()).productUsers.get(id), { depth: null });
-}
-
-async function listProductUsers(): Promise<void> {
-  const page = await (await getServiceClient()).productUsers.list({
-    appId: await getAppId(),
-    limit: Number(await ask("Limit", "20"))
-  });
-  console.table(page.product_users.map((user) => ({
-    product_end_user_id: user.product_end_user_id,
-    external_user_id: user.external_user_id,
-    status: user.status,
-    display_name: user.display_name
-  })));
-}
 
 async function grantCredit(): Promise<void> {
   const response = await (await getServiceClient()).productUsers.grantCreditByExternalId({
@@ -182,16 +165,6 @@ async function grantCredit(): Promise<void> {
   });
 }
 
-async function grantCreditById(): Promise<void> {
-  const id = await requireValue("Product end-user ID", "ZORVEUS_TEST_PRODUCT_END_USER_ID");
-  const response = await (await getServiceClient()).productUsers.grantCredit(id, {
-    appId: await getAppId(),
-    amount: await ask("Credit amount as a decimal string", "1.000000000000"),
-    currency: await ask("Currency", "USD"),
-    reason: await ask("Reason", "SDK runner test grant")
-  });
-  console.dir(response.credit_grant, { depth: null });
-}
 
 async function getCreditSummary(): Promise<void> {
   const summary = await (await getServiceClient()).productUsers.getCreditSummaryByExternalId({
@@ -217,25 +190,6 @@ async function listCreditGrants(): Promise<void> {
   })));
 }
 
-async function listCreditGrantsById(): Promise<void> {
-  const id = await requireValue("Product end-user ID", "ZORVEUS_TEST_PRODUCT_END_USER_ID");
-  const response = await (await getServiceClient()).productUsers.listCreditGrants(id, {
-    appId: await getAppId(),
-    limit: Number(await ask("Limit", "20"))
-  });
-  console.table(response.credit_grants);
-}
-
-async function revokeCredit(): Promise<void> {
-  const service = await getServiceClient();
-  const user = await service.productUsers.getByExternalId({
-    appId: await getAppId(),
-    externalUserId: await getExternalUserId()
-  });
-  const grantId = await requireValue("Credit grant ID", "ZORVEUS_TEST_CREDIT_GRANT_ID");
-  const response = await service.productUsers.revokeCredit(user.product_end_user_id, grantId);
-  console.table({ credit_grant_id: grantId, revoked: response.revoked });
-}
 
 async function listUsageEvents(): Promise<void> {
   const response = await (await getServiceClient()).usageEvents.list({
@@ -434,14 +388,9 @@ const actions: RunnerAction[] = [
   { name: "Create one embedding", run: testEmbeddings, changesData: true },
   { name: "Create or update a product user", run: upsertProductUser, changesData: true },
   { name: "Get product-user details", run: getProductUser },
-  { name: "Get a product user by internal ID", run: getProductUserById },
-  { name: "List product users", run: listProductUsers },
   { name: "Give a credit grant by external ID", run: grantCredit, changesData: true },
-  { name: "Give a credit grant by internal ID", run: grantCreditById, changesData: true },
   { name: "Get a credit summary", run: getCreditSummary },
   { name: "List credit grants by external ID", run: listCreditGrants },
-  { name: "List credit grants by internal ID", run: listCreditGrantsById },
-  { name: "Revoke one credit grant", run: revokeCredit, changesData: true },
   { name: "List cache-aware usage events", run: listUsageEvents },
   { name: "List provider credentials", run: listProviderCredentials },
   { name: "Get one provider credential", run: getProviderCredential },

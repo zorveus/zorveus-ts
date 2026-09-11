@@ -5,18 +5,13 @@ import type {
   UpsertProductUserParams,
   UpsertProductUserResponse,
   ProductUserResponse,
-  ProductUserListResponse,
-  ProductUserListParams,
   GetProductUserByExternalIdParams,
   GetProductUserCreditSummaryByExternalIdParams,
   ProductUserCreditSummaryResponse,
-  GrantCreditParams,
   GrantCreditByExternalIdParams,
   GrantProductUserCreditsResponse,
   ProductUserCreditGrantListResponse,
-  ListCreditGrantsParams,
-  ListCreditGrantsByExternalIdParams,
-  RevokeProductUserCreditGrantResponse
+  ListCreditGrantsByExternalIdParams
 } from "../types/product-users";
 
 export class ProductUsers {
@@ -60,22 +55,6 @@ export class ProductUsers {
     options: RequestOptions = {}
   ): Promise<UpsertProductUserResponse> {
     return this.createOrUpdate(params, options);
-  }
-
-  /**
-   * Retrieves a single product end-user by ID (`GET /product-users/{product_end_user_id}`).
-   */
-  async get(
-    productEndUserId: string,
-    options: RequestOptions = {}
-  ): Promise<ProductUserResponse> {
-    return this.transport.request<ProductUserResponse>(
-      `/product-users/${encodeURIComponent(productEndUserId)}`,
-      {
-        method: "GET",
-        ...options
-      }
-    );
   }
 
   /**
@@ -133,59 +112,6 @@ export class ProductUsers {
   }
 
   /**
-   * Lists product end-users for an organization (`GET /product-users`).
-   */
-  async list(
-    params: ProductUserListParams = {},
-    options: RequestOptions = {}
-  ): Promise<ProductUserListResponse> {
-    const query: Record<string, unknown> = {};
-    if (params.orgId) query.org_id = params.orgId;
-    if (params.appId) query.app_id = params.appId;
-    if (params.limit !== undefined) query.limit = params.limit;
-    if (params.offset !== undefined) query.offset = params.offset;
-
-    return this.transport.request<ProductUserListResponse>("/product-users", {
-      method: "GET",
-      query,
-      ...options
-    });
-  }
-
-  /**
-   * Grants startup-funded AI credits to a product user (`POST /product-users/{id}/credit-grants`).
-   * Validates amount as a strict financial decimal string.
-   */
-  async grantCredit(
-    productEndUserId: string,
-    params: GrantCreditParams,
-    options: RequestOptions = {}
-  ): Promise<GrantProductUserCreditsResponse> {
-    const amount = assertDecimalString(params.amount, "grantCredit.amount");
-
-    const payload = {
-      app_id: params.appId,
-      amount,
-      currency: params.currency || "USD",
-      reason: params.reason ?? null,
-      expires_at: params.expiresAt ?? null,
-      metadata: params.metadata ?? null
-    };
-
-    const query = params.orgId ? { org_id: params.orgId } : undefined;
-
-    return this.transport.request<GrantProductUserCreditsResponse>(
-      `/product-users/${encodeURIComponent(productEndUserId)}/credit-grants`,
-      {
-        method: "POST",
-        body: payload,
-        query,
-        ...options
-      }
-    );
-  }
-
-  /**
    * Grants credits to an end user by external ID (`POST /product-users/by-external-id/credit-grants`).
    * Automatically provisions the product user if they do not exist yet.
    */
@@ -222,31 +148,6 @@ export class ProductUsers {
   }
 
   /**
-   * Lists credit grants for a product user (`GET /product-users/{id}/credit-grants`).
-   * Accepts either an external user ID or a Zorveus product user ID.
-   */
-  async listCreditGrants(
-    userIdentifier: string,
-    params: ListCreditGrantsParams = {},
-    options: RequestOptions = {}
-  ): Promise<ProductUserCreditGrantListResponse> {
-    const query: Record<string, unknown> = {};
-    if (params.appId) query.app_id = params.appId;
-    if (params.orgId) query.org_id = params.orgId;
-    if (params.limit !== undefined) query.limit = params.limit;
-    if (params.offset !== undefined) query.offset = params.offset;
-
-    return this.transport.request<ProductUserCreditGrantListResponse>(
-      `/product-users/${encodeURIComponent(userIdentifier)}/credit-grants`,
-      {
-        method: "GET",
-        query,
-        ...options
-      }
-    );
-  }
-
-  /**
    * Lists credit grants for a product user by external ID (`GET /product-users/by-external-id/credit-grants`).
    */
   async listCreditGrantsByExternalId(
@@ -268,23 +169,6 @@ export class ProductUsers {
       {
         method: "GET",
         query,
-        ...options
-      }
-    );
-  }
-
-  /**
-   * Revokes an active credit grant (`POST /product-users/{id}/credit-grants/{grantId}/revoke`).
-   */
-  async revokeCredit(
-    productEndUserId: string,
-    creditGrantId: string,
-    options: RequestOptions = {}
-  ): Promise<RevokeProductUserCreditGrantResponse> {
-    return this.transport.request<RevokeProductUserCreditGrantResponse>(
-      `/product-users/${encodeURIComponent(productEndUserId)}/credit-grants/${encodeURIComponent(creditGrantId)}/revoke`,
-      {
-        method: "POST",
         ...options
       }
     );

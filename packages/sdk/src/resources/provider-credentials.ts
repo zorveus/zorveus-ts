@@ -90,6 +90,7 @@ export class ProviderCredentials {
     options: RequestOptions = {}
   ): Promise<RotateProviderCredentialResponse> {
     const payload = {
+      secret: params.apiKey,
       api_key: params.apiKey,
       secret_kind: params.secretKind || "api_key"
     };

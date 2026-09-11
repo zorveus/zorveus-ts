@@ -138,60 +138,6 @@ describe("Product Users Management", () => {
     expect(summary.spent_this_month).toBe("10.000000000000");
   });
 
-  it("grants credit with decimal validation and returns GrantProductUserCreditsResponse", async () => {
-    const mockResponse = {
-      product_user: {
-        product_end_user_id: "usr_123",
-        org_id: "org_456",
-        app_id: "app_789",
-        external_user_id: "ext_001",
-        display_name: "Jane",
-        email_hash: null,
-        status: "active",
-        metadata: null,
-        usage: {}
-      },
-      credit_grant: {
-        credit_grant_id: "grant_999",
-        org_id: "org_456",
-        app_id: "app_789",
-        product_end_user_id: "usr_123",
-        amount: "50.0000",
-        remaining_amount: "50.0000",
-        currency: "USD",
-        source: "startup_grant",
-        reason: "Onboarding bonus",
-        status: "active",
-        expires_at: null,
-        metadata: null,
-        created_at: "2026-08-14T00:00:00Z",
-        updated_at: "2026-08-14T00:00:00Z"
-      },
-      credit_summary: {
-        product_end_user_id: "usr_123",
-        total_granted: "50.0000",
-        total_remaining: "50.0000",
-        active_grants_count: 1
-      }
-    };
-
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(mockResponse), {
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      })
-    );
-
-    const client = new ZorveusServiceClient({ apiKey: "zrv_service_key_123" });
-    const res = await client.productUsers.grantCredit("usr_123", {
-      amount: "50.0000",
-      reason: "Onboarding bonus"
-    });
-
-    expect(res.credit_grant.credit_grant_id).toBe("grant_999");
-    expect(res.credit_grant.amount).toBe("50.0000");
-    expect(res.credit_summary.total_remaining).toBe("50.0000");
-  });
 
   it("grants credits by external ID via POST /product-users/by-external-id/credit-grants", async () => {
     const mockResponse = {
@@ -307,7 +253,11 @@ describe("Product Users Management", () => {
   it("throws InvalidDecimalError when amount is not a valid decimal string", async () => {
     const client = new ZorveusServiceClient({ apiKey: "zrv_service_key_123" });
     await expect(
-      client.productUsers.grantCredit("usr_123", { amount: "INVALID_50" })
+      client.productUsers.grantCreditByExternalId({
+        appId: "app_123",
+        externalUserId: "usr_123",
+        amount: "INVALID_50"
+      })
     ).rejects.toThrow("must be a valid decimal string");
   });
 });
