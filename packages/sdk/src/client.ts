@@ -2,6 +2,8 @@ import { HTTPTransport } from "./http/transport";
 import { Chat } from "./resources/chat/index";
 import { Embeddings } from "./resources/embeddings";
 import { Models } from "./resources/models";
+import { Images } from "./resources/images";
+import { Audio } from "./resources/audio/index";
 import type {
   ZorveusInferenceClientOptions,
   RequestOptions,
@@ -16,6 +18,8 @@ export class ZorveusInferenceClient {
   readonly chat: Chat;
   readonly embeddings: Embeddings;
   readonly models: Models;
+  readonly images: Images;
+  readonly audio: Audio;
   protected readonly transport: HTTPTransport;
 
   constructor(options: ZorveusInferenceClientOptions) {
@@ -46,6 +50,8 @@ export class ZorveusInferenceClient {
     this.chat = new Chat(this.transport);
     this.embeddings = new Embeddings(this.transport);
     this.models = new Models(this.transport);
+    this.images = new Images(this.transport);
+    this.audio = new Audio(this.transport);
   }
 
   /**

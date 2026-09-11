@@ -8,6 +8,7 @@ export interface HttpRequestOptions extends RequestOptions {
   query?: Record<string, unknown>;
   isGateway?: boolean;
   stream?: boolean;
+  rawResponse?: boolean;
 }
 
 export class HTTPTransport {
@@ -125,6 +126,10 @@ export class HTTPTransport {
 
         if (response.status === 204) {
           return undefined as unknown as T;
+        }
+
+        if (options.rawResponse) {
+          return response as unknown as T;
         }
 
         const data = await this.parseResponseBody(response);

@@ -18,7 +18,8 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
-      "@zorveus/sdk": ["./packages/sdk/dist/index.d.ts"]
+      "@zorveus/sdk": ["./packages/sdk/dist/index.d.ts"],
+      "@zorveus/sdk/openai": ["./packages/sdk/dist/adapters/openai.d.ts"]
     }
   }
 }

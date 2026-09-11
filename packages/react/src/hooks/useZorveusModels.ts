@@ -16,7 +16,7 @@ export interface UseZorveusModelsReturn {
 
 export function useZorveusModels(options: UseZorveusModelsOptions = {}): UseZorveusModelsReturn {
   const { routeStatus = "available", autoFetch = true } = options;
-  const { client } = useZorveusContext();
+  const { client, isLoadingAuth } = useZorveusContext();
 
   const [models, setModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -32,15 +32,20 @@ export function useZorveusModels(options: UseZorveusModelsOptions = {}): UseZorv
 
   const fetchModels = useCallback(async () => {
     if (!client) {
-      if (isMountedRef.current) {
-        setIsLoading(false);
-        setModels([]);
-        setError(
-          new AuthenticationError("Authentication required. Connect your AI wallet to load available models.", {
-            code: "unauthenticated"
-          })
-        );
+      if (!isMountedRef.current) return;
+      if (isLoadingAuth) {
+        setIsLoading(true);
+        setError(null);
+        return;
       }
+
+      setIsLoading(false);
+      setModels([]);
+      setError(
+        new AuthenticationError("Authentication required. Connect your AI wallet to load available models.", {
+          code: "unauthenticated"
+        })
+      );
       return;
     }
 

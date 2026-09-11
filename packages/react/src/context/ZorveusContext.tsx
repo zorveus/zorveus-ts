@@ -1,5 +1,14 @@
 import React, { createContext, useContext, useState, useMemo, useEffect } from "react";
 import { Zorveus } from "@zorveus/sdk";
+import { ZorveusOpenAI } from "@zorveus/sdk/openai";
+
+export interface ZorveusOAuthSessionPayload {
+  access_token: string;
+  app_connection_id?: string;
+  api_base?: string;
+}
+
+export type ZorveusTokenProvider = () => Promise<string | ZorveusOAuthSessionPayload | null>;
 
 export interface ZorveusAuthState {
   isConnected: boolean;
@@ -7,6 +16,7 @@ export interface ZorveusAuthState {
   appConnectionId: string | null;
   apiBase: string | null;
   error: Error | null;
+  isLoadingAuth: boolean;
 }
 
 export interface ZorveusContextValue extends ZorveusAuthState {
@@ -17,7 +27,8 @@ export interface ZorveusContextValue extends ZorveusAuthState {
   gatewayBaseURL: string;
   authBaseUrl: string;
   client: Zorveus | null;
-  setOAuthSession: (session: { access_token: string; app_connection_id?: string; api_base?: string }) => void;
+  openAIClient: ZorveusOpenAI | null;
+  setOAuthSession: (session: ZorveusOAuthSessionPayload) => void;
   clearOAuthSession: () => void;
 }
 
@@ -27,6 +38,18 @@ export interface ZorveusProviderProps {
   children: React.ReactNode;
   clientId: string;
   redirectUri: string;
+
+  /**
+   * Synchronous OAuth access token or inference key.
+   * Eliminates the unauthenticated first-render flash when sessions are resolved externally.
+   */
+  accessToken?: string | null;
+
+  /**
+   * Async token resolver. Executed on mount or when called.
+   * Keeps `isLoadingAuth: true` until resolution so child hooks don't flash premature errors.
+   */
+  tokenProvider?: ZorveusTokenProvider;
 
   /**
    * Optional client secret for confidential OAuth clients.
@@ -78,8 +101,31 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
 
   const resolvedBaseURL = (props.baseURL || props.authBaseUrl || "https://api.zorveus.com").replace(/\/+$/, "");
   const resolvedGatewayBaseURL = (props.gatewayBaseURL || `${resolvedBaseURL}/v1`).replace(/\/+$/, "");
+  const initialToken = props.accessToken || inferenceKey || null;
 
   const [authState, setAuthState] = useState<ZorveusAuthState>(() => {
+    if (props.accessToken) {
+      return {
+        isConnected: true,
+        accessToken: props.accessToken,
+        appConnectionId: null,
+        apiBase: null,
+        error: null,
+        isLoadingAuth: false
+      };
+    }
+
+    if (props.tokenProvider) {
+      return {
+        isConnected: false,
+        accessToken: null,
+        appConnectionId: null,
+        apiBase: null,
+        error: null,
+        isLoadingAuth: true
+      };
+    }
+
     if (persistToken && typeof window !== "undefined") {
       try {
         const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -90,7 +136,8 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
             accessToken: parsed.access_token,
             appConnectionId: parsed.app_connection_id || null,
             apiBase: parsed.api_base || null,
-            error: null
+            error: null,
+            isLoadingAuth: false
           };
         }
       } catch {
@@ -99,11 +146,12 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
     }
 
     return {
-      isConnected: false,
-      accessToken: inferenceKey || null,
+      isConnected: Boolean(initialToken),
+      accessToken: initialToken,
       appConnectionId: null,
       apiBase: null,
-      error: null
+      error: null,
+      isLoadingAuth: false
     };
   });
 
@@ -112,18 +160,83 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
     if (inferenceKey && !authState.accessToken) {
       setAuthState((prev) => ({
         ...prev,
+        isConnected: true,
         accessToken: inferenceKey
       }));
     }
   }, [inferenceKey, authState.accessToken]);
 
-  const setOAuthSession = (session: { access_token: string; app_connection_id?: string; api_base?: string }) => {
+  // Sync synchronous accessToken prop changes
+  useEffect(() => {
+    if (props.accessToken === undefined) return;
+    if (props.accessToken === null) {
+      clearOAuthSession();
+      return;
+    }
+    if (props.accessToken !== authState.accessToken) {
+      setAuthState((prev) => ({
+        ...prev,
+        isConnected: true,
+        accessToken: props.accessToken as string,
+        isLoadingAuth: false,
+        error: null
+      }));
+    }
+  }, [props.accessToken]);
+
+  // Handle async tokenProvider prop
+  useEffect(() => {
+    if (!props.tokenProvider) return;
+
+    let isCancelled = false;
+    setAuthState((prev) => ({ ...prev, isLoadingAuth: true }));
+
+    props.tokenProvider()
+      .then((res) => {
+        if (isCancelled) return;
+        if (!res) {
+          setAuthState((prev) => ({ ...prev, isLoadingAuth: false }));
+          return;
+        }
+
+        if (typeof res === "string") {
+          setAuthState({
+            isConnected: true,
+            accessToken: res,
+            appConnectionId: null,
+            apiBase: null,
+            error: null,
+            isLoadingAuth: false
+          });
+          return;
+        }
+
+        setOAuthSession(res);
+        setAuthState((prev) => ({ ...prev, isLoadingAuth: false }));
+      })
+      .catch((err) => {
+        if (isCancelled) return;
+        const e = err instanceof Error ? err : new Error(String(err));
+        setAuthState((prev) => ({
+          ...prev,
+          isLoadingAuth: false,
+          error: e
+        }));
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [props.tokenProvider]);
+
+  const setOAuthSession = (session: ZorveusOAuthSessionPayload) => {
     const newState: ZorveusAuthState = {
       isConnected: true,
       accessToken: session.access_token,
       appConnectionId: session.app_connection_id || null,
       apiBase: session.api_base || null,
-      error: null
+      error: null,
+      isLoadingAuth: false
     };
 
     setAuthState(newState);
@@ -143,7 +256,8 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
       accessToken: null,
       appConnectionId: null,
       apiBase: null,
-      error: null
+      error: null,
+      isLoadingAuth: false
     });
 
     if (persistToken && typeof window !== "undefined") {
@@ -167,6 +281,22 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
     });
   }, [authState.accessToken, authState.apiBase, inferenceKey, resolvedBaseURL, resolvedGatewayBaseURL]);
 
+  // Create memoized OpenAI adapter client configured for Zorveus Gateway
+  const openAIClient = useMemo(() => {
+    const keyToUse = authState.accessToken || inferenceKey;
+    if (!keyToUse) return null;
+
+    try {
+      return new ZorveusOpenAI({
+        apiKey: keyToUse,
+        baseURL: authState.apiBase || resolvedGatewayBaseURL,
+        dangerouslyAllowBrowser: true
+      });
+    } catch {
+      return null;
+    }
+  }, [authState.accessToken, authState.apiBase, inferenceKey, resolvedGatewayBaseURL]);
+
   const value: ZorveusContextValue = {
     ...authState,
     isConnected: Boolean(authState.accessToken || inferenceKey),
@@ -177,6 +307,7 @@ export function ZorveusProvider(props: ZorveusProviderProps): React.JSX.Element 
     gatewayBaseURL: resolvedGatewayBaseURL,
     authBaseUrl: resolvedBaseURL,
     client,
+    openAIClient,
     setOAuthSession,
     clearOAuthSession
   };

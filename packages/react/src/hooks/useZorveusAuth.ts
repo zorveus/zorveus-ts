@@ -2,13 +2,18 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { ZorveusOAuth, type OAuthTokenResponse } from "@zorveus/sdk";
 import { useZorveusContext } from "../context/ZorveusContext";
 
+export interface ConnectOptions {
+  scopes?: string[];
+  mode?: "popup" | "redirect";
+}
+
 export interface UseZorveusAuthReturn {
   isConnected: boolean;
   accessToken: string | null;
   appConnectionId: string | null;
   isLoading: boolean;
   error: Error | null;
-  connect: (scopes?: string[]) => Promise<void>;
+  connect: (optionsOrScopes?: string[] | ConnectOptions) => Promise<void>;
   disconnect: () => void;
 }
 
@@ -37,7 +42,12 @@ export function useZorveusAuth(): UseZorveusAuthReturn {
   }, []);
 
   const connect = useCallback(
-    async (scopes: string[] = ["inference:write", "models:*"]) => {
+    async (optionsOrScopes?: string[] | ConnectOptions) => {
+      const resolvedScopes = Array.isArray(optionsOrScopes)
+        ? optionsOrScopes
+        : optionsOrScopes?.scopes ?? ["inference:write", "models:*"];
+      const mode = (!Array.isArray(optionsOrScopes) && optionsOrScopes?.mode) || "popup";
+
       if (isMountedRef.current) {
         setIsLoading(true);
         setError(null);
@@ -56,9 +66,16 @@ export function useZorveusAuth(): UseZorveusAuthReturn {
           redirectUri,
           state: pkce.state,
           codeChallenge: pkce.codeChallenge,
-          scopes,
+          scopes: resolvedScopes,
           baseURL: authBaseUrl
         });
+
+        if (mode === "redirect") {
+          if (typeof window !== "undefined") {
+            window.location.href = authUrl;
+          }
+          return;
+        }
 
         // Launch OAuth Consent Popup
         const width = 540;

@@ -18,6 +18,7 @@
     "demo:runner": "npx tsx examples/node-scripts/test-all.ts",
     "demo:mindspire": "npm run --workspace=@zorveus/mindspire-studio dev",
     "demo:saasify": "npm run --workspace=@zorveus/saasify-suite dev",
+    "demo:nexus": "npm run --workspace=@zorveus/nexus-ai-spa dev",
     "demo:react": "npm run demo:mindspire",
     "publish:packages": "npm run build && npm publish --workspace=@zorveus/sdk --access public && npm publish --workspace=@zorveus/react --access public"
   },

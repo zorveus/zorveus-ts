@@ -1,156 +1,257 @@
 # `@zorveus/react`
 
-Official React hooks, Context Provider, and UI components for the [Zorveus](https://zorveus.com) AI platform.
+React hooks and components for Zorveus authentication, inference, model discovery, and spend display.
 
-Provides user AI wallet connection, streaming inference, model selection, and spend limit tracking in React 18+ and Next.js applications.
-
-## Installation
+## Install the package
 
 ```bash
 npm install @zorveus/react @zorveus/sdk
 ```
 
-## Quickstart
+The package supports React 18 and later. Install `openai` if your application uses the `openAIClient` exposed by `useZorveusContext()`:
 
-### Setup `<ZorveusProvider>` and `<OAuthCallbackHandler>`
+```bash
+npm install openai
+```
 
-Wrap your application with `<ZorveusProvider>` at the root, and include `<OAuthCallbackHandler />` to process popup redirect events:
+## Pick an authentication method
+
+`ZorveusProvider` accepts an OAuth session, an inference key, or a token resolver.
+
+| Provider prop | Use it for |
+| --- | --- |
+| `clientId` and `redirectUri` | OAuth PKCE connection |
+| `inferenceKey` | A non-OAuth application with a Zorveus inference key |
+| `accessToken` | A token that your application already resolved |
+| `tokenProvider` | An asynchronous token or session resolver |
+
+Do not put an organization service key in a React application. `ZorveusServiceClient` belongs on your server.
+
+## Connect with OAuth
+
+Wrap the application in `ZorveusProvider`:
 
 ```tsx
-import React from "react";
-import { ZorveusProvider, OAuthCallbackHandler } from "@zorveus/react";
+import { OAuthCallbackHandler, ZorveusProvider } from "@zorveus/react";
 
 export function App({ children }: { children: React.ReactNode }) {
-  return (
-    <ZorveusProvider
-      clientId="zrv_client_92294673f5284df3899b7eaaf43ecd82"
-      redirectUri="http://localhost:5173/oauth/callback"
-      persistToken={true}
-    >
-      <OAuthCallbackHandler />
-      {children}
-    </ZorveusProvider>
-  );
+	return (
+		<ZorveusProvider
+			clientId="your_oauth_client_id"
+			redirectUri="http://localhost:5173/oauth/callback"
+		>
+			<OAuthCallbackHandler />
+			{children}
+		</ZorveusProvider>
+	);
 }
 ```
 
-### Connect AI wallet, select model, and stream inference
+`OAuthCallbackHandler` supports both popup and full-page redirect flows. Render it on the route configured by `redirectUri`.
+
+Add a connection button:
 
 ```tsx
-import React from "react";
-import {
-  ConnectWalletButton,
-  useZorveusAuth,
-  useZorveusInference,
-  useZorveusModels,
-  useZorveusSpend,
-  SpendCapIndicator
-} from "@zorveus/react";
+import { ConnectWalletButton } from "@zorveus/react";
 
-export function AIStudio() {
-  const { isConnected, error: authError } = useZorveusAuth();
-  const { models, isLoading: modelsLoading } = useZorveusModels({ routeStatus: "available" });
-  const { usage } = useZorveusSpend();
-
-  const { messages, submitPrompt, isStreaming, stopStreaming } = useZorveusInference({
-    model: "openai/gpt-4.1-mini",
-    systemPrompt: "You are an expert AI assistant."
-  });
-
-  return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: 24 }}>
-      <ConnectWalletButton />
-
-      {authError && <p style={{ color: "red" }}>Auth error: {authError.message}</p>}
-
-      {isConnected && (
-        <div style={{ marginTop: 24 }}>
-          {usage && (
-            <SpendCapIndicator
-              current={usage.virtual_spend_this_period ?? usage.spent_this_period}
-              limit={usage.spend_cap}
-              period={usage.period}
-            />
-          )}
-
-          <div style={{ margin: "16px 0" }}>
-            <label>Model: </label>
-            <select disabled={modelsLoading}>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.provider ? `[${m.provider}] ` : ""}{m.name || m.id}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button 
-            onClick={() => submitPrompt("Explain quantum computing simply.")}
-            disabled={isStreaming}
-          >
-            {isStreaming ? "Streaming..." : "Generate Explanation"}
-          </button>
-
-          {isStreaming && (
-            <button onClick={stopStreaming} style={{ marginLeft: 8 }}>
-              Stop
-            </button>
-          )}
-
-          <div style={{ marginTop: 16 }}>
-            {messages.map((m, i) => (
-              <div key={i} style={{ marginBottom: 8 }}>
-                <strong>{m.role}:</strong> {m.content}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+export function ConnectZorveus() {
+	return (
+		<ConnectWalletButton
+			scopes={["inference:write", "models:*"]}
+			authMode="popup"
+			onError={(error) => console.error(error)}
+		/>
+	);
 }
 ```
 
-## Components and hooks reference
+Request at least one model scope, such as `models:*`. The authorization server rejects a request without a model scope.
 
-### Components
+Tokens stay in memory by default. Set `persistToken` to store the OAuth session in `localStorage`. Persistent browser tokens have more exposure to cross-site scripting attacks.
 
-| Export | Type | Description |
-| :--- | :--- | :--- |
-| `<ZorveusProvider>` | Provider | Root Context Provider managing auth state, client lifecycle, and token storage |
-| `<ConnectWalletButton>` | Component | Button component with PKCE popup workflow and Zorveus branding |
-| `<OAuthCallbackHandler>` | Component | Handler component that processes OAuth popup redirects |
-| `<SpendCapIndicator>` | Component | Progress bar indicator with status color transitions |
+## Use a token without OAuth
 
-### Hooks
-
-| Hook | Return value | Description |
-| :--- | :--- | :--- |
-| `useZorveusAuth()` | `{ isConnected, accessToken, error, connect, disconnect, connectionId }` | Accesses connection state and triggers OAuth PKCE connect/disconnect flows |
-| `useZorveusInference(options)` | `{ messages, isStreaming, submitPrompt, stopStreaming, clearMessages, error }` | Manages streaming inference, token accumulation, and message history |
-| `useZorveusModels(options)` | `{ models, isLoading, error, refetch }` | Queries accessible models (`GET /v1/models?route_status=available`) |
-| `useZorveusSpend(options)` | `{ usage, spentDecimal, spendCapDecimal, remainingBalanceDecimal, isLoading, error, refresh }` | Queries live virtual spend, the base cap, and the remaining base allowance (`GET /inference-keys/usage`) |
-
-Use the `*Decimal` fields for financial calculations. The numeric aliases remain for backward compatibility and can lose precision.
-| `useZorveusContext()` | `{ client, isConnected, accessToken, ... }` | Direct access to the raw Zorveus context and initialized `@zorveus/sdk` client |
-
-## Provider configuration options
+Pass an inference key when the application does not need the wallet connection flow:
 
 ```tsx
 <ZorveusProvider
-  clientId="your_oauth_client_id"
-  redirectUri="http://localhost:5173/oauth/callback"
-  persistToken={true}
-  baseURL="https://api.zorveus.com"
-  gatewayBaseURL="https://api.zorveus.com/v1"
-  scopes={["inference:write", "models:*"]}
+	clientId="unused_for_inference_key_auth"
+	redirectUri="http://localhost:5173/oauth/callback"
+	inferenceKey={import.meta.env.VITE_ZORVEUS_INFERENCE_KEY}
 >
-  <App />
+	<App />
 </ZorveusProvider>
 ```
 
-> [!NOTE]
-> Ensure `scopes` includes at least one model scope such as `models:*`. Omitting model scopes triggers a `zorveus_model_scope_required` authorization error.
+You can also resolve a session asynchronously:
+
+```tsx
+<ZorveusProvider
+	clientId="your_oauth_client_id"
+	redirectUri="http://localhost:5173/oauth/callback"
+	tokenProvider={async () => {
+		const response = await fetch("/api/zorveus/session");
+		if (!response.ok) return null;
+		return response.json();
+	}}
+>
+	<App />
+</ZorveusProvider>
+```
+
+The resolver can return a token string, an OAuth session object, or `null`.
+
+## Stream chat with product-user attribution
+
+Pass `zorveusMetadata` to `useZorveusInference()`. The hook adds it to every chat request that it creates.
+
+```tsx
+import { useState } from "react";
+import { useZorveusInference, useZorveusModels } from "@zorveus/react";
+
+export function Chat({ customerId }: { customerId: string }) {
+	const { models, isLoading: modelsLoading } = useZorveusModels();
+	const [model, setModel] = useState("openai/gpt-4.1-mini");
+	const { messages, input, setInput, submitPrompt, isStreaming, abort, error } =
+		useZorveusInference({
+			model,
+			systemPrompt: "Answer clearly and briefly.",
+			zorveusMetadata: {
+				externalUserId: customerId,
+				metadata: { plan: "growth" }
+			}
+		});
+
+	return (
+		<section>
+			<select
+				value={model}
+				disabled={modelsLoading}
+				onChange={(event) => setModel(event.target.value)}
+			>
+				{models.map((item) => (
+					<option key={item.id} value={item.id}>
+						{item.name || item.id}
+					</option>
+				))}
+			</select>
+
+			{messages.map((message, index) => (
+				<p key={`${message.role}-${index}`}>
+					<strong>{message.role}:</strong> {message.content}
+				</p>
+			))}
+
+			<input value={input} onChange={(event) => setInput(event.target.value)} />
+			<button onClick={() => void submitPrompt()} disabled={isStreaming || !input.trim()}>
+				Send
+			</button>
+			{isStreaming && <button onClick={abort}>Stop</button>}
+			{error && <p role="alert">{error.message}</p>}
+		</section>
+	);
+}
+```
+
+Use `productEndUserId` instead of `externalUserId` when you already know the Zorveus product-user ID.
+
+## Call other inference resources
+
+`useZorveusContext()` exposes the native `client` and the OpenAI-compatible `openAIClient`. The native client supports chat, embeddings, images, speech, transcription, models, and usage.
+
+Pass `zorveusMetadata` on every native inference request that needs product-user attribution:
+
+```tsx
+import { useZorveusContext } from "@zorveus/react";
+
+export function GenerateImage({ customerId }: { customerId: string }) {
+	const { client } = useZorveusContext();
+
+	async function generate() {
+		if (!client) return;
+
+		const result = await client.images.generate({
+			model: "dall-e-3",
+			prompt: "A geometric illustration of an AI gateway",
+			zorveusMetadata: { externalUserId: customerId }
+		});
+
+		console.log(result.data[0]?.url);
+	}
+
+	return <button onClick={() => void generate()}>Generate image</button>;
+}
+```
+
+The provider does not add a global product user to the native client. Pass attribution to each native request. For the OpenAI adapter, pass attribution in request metadata because the provider creates `openAIClient` without constructor-level attribution.
+
+## Display spend
+
+`SpendCapIndicator` reads usage from the current connection when you omit both `current` and `limit`:
+
+```tsx
+import { SpendCapIndicator } from "@zorveus/react";
+
+export function AccountSpend() {
+	return <SpendCapIndicator theme="light" warningThreshold={0.8} />;
+}
+```
+
+You can also pass values yourself:
+
+```tsx
+<SpendCapIndicator
+	current="12.340000"
+	limit="50.000000"
+	currency="USD"
+	period="monthly"
+/>
+```
+
+Prefer decimal strings for money. JavaScript numbers can lose precision.
+
+## Public exports
+
+### Hooks
+
+| Hook | Main values |
+| --- | --- |
+| `useZorveusAuth()` | `isConnected`, `accessToken`, `appConnectionId`, `isLoading`, `error`, `connect`, `disconnect` |
+| `useZorveusInference(options)` | `messages`, `input`, `setInput`, `submitPrompt`, `isStreaming`, `error`, `abort`, `clearMessages` |
+| `useZorveusModels(options)` | `models`, `isLoading`, `error`, `refetch` |
+| `useZorveusSpend(options)` | Usage data, decimal and numeric amounts, loading state, errors, and `refresh` |
+| `useZorveusContext()` | Authentication state, the native `client`, the `openAIClient`, and session methods |
+
+`useZorveusModels()` and `useZorveusSpend()` accept `{ autoFetch?: boolean }`. `useZorveusModels()` also accepts `routeStatus`.
+
+### Components
+
+| Component | Purpose |
+| --- | --- |
+| `ZorveusProvider` | Stores authentication state and creates SDK clients |
+| `ConnectWalletButton` | Starts an OAuth popup or redirect flow |
+| `OAuthCallbackHandler` | Validates the OAuth callback and exchanges the authorization code |
+| `SpendCapIndicator` | Displays current spend against a cap |
+| `ZorveusIcon` | Renders the Zorveus icon |
+
+`ConnectWalletButton` and `SpendCapIndicator` support custom classes, inline styles, an `unstyled` mode, and render props.
+
+## Provider options
+
+| Prop | Type | Default |
+| --- | --- | --- |
+| `clientId` | `string` | Required |
+| `redirectUri` | `string` | Required |
+| `clientSecret` | `string` | None |
+| `accessToken` | `string \| null` | None |
+| `tokenProvider` | `() => Promise<string \| ZorveusOAuthSessionPayload \| null>` | None |
+| `inferenceKey` | `string` | None |
+| `baseURL` | `string` | `https://api.zorveus.com` |
+| `gatewayBaseURL` | `string` | `${baseURL}/v1` |
+| `authBaseUrl` | `string` | The value of `baseURL` |
+| `persistToken` | `boolean` | `false` |
+
+Do not expose `clientSecret` in public browser code. Use it only when your runtime keeps the secret on a trusted server.
 
 ## License
 

@@ -48,4 +48,17 @@ describe("ConnectWalletButton", () => {
     expect(button).toBeDefined();
     expect(button.className).toBe("my-shadcn-btn");
   });
+
+  it("supports authMode='redirect' prop", () => {
+    render(
+      <ZorveusProvider clientId="zrv_client_123" redirectUri="https://myapp.com/callback">
+        <ConnectWalletButton authMode="redirect">
+          Direct Connect
+        </ConnectWalletButton>
+      </ZorveusProvider>
+    );
+
+    const button = screen.getByRole("button", { name: "Direct Connect" });
+    expect(button).toBeDefined();
+  });
 });

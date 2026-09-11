@@ -1,20 +1,29 @@
 import React, { useEffect, useState } from "react";
+import { ZorveusOAuth, type OAuthTokenResponse } from "@zorveus/sdk";
+import { useOptionalZorveusContext } from "../context/ZorveusContext";
 
 export interface OAuthCallbackHandlerProps {
-  onSuccess?: (code: string, state?: string) => void;
+  onSuccess?: (code: string, state?: string, session?: OAuthTokenResponse) => void;
   onError?: (error: string, description?: string) => void;
+  /**
+   * Optional route to navigate to after successful token exchange in direct redirect mode.
+   */
+  redirectTo?: string;
 }
 
 /**
  * Official Zorveus OAuth Callback Handler component.
- * Parses query params after authorization consent, broadcasts payload to opener window
- * via dual-channel (postMessage + localStorage), and handles window closing.
+ * Supports both popup mode (broadcasting to opener) and SPA redirect mode (auto-exchanging PKCE tokens).
  */
 export function OAuthCallbackHandler({
   onSuccess,
-  onError
+  onError,
+  redirectTo
 }: OAuthCallbackHandlerProps = {}): React.JSX.Element | null {
+  const context = useOptionalZorveusContext();
   const [closed, setClosed] = useState(false);
+  const [exchangeState, setExchangeState] = useState<"idle" | "exchanging" | "done" | "error">("idle");
+  const [exchangeError, setExchangeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -29,13 +38,18 @@ export function OAuthCallbackHandler({
       return;
     }
 
+    if (error) {
+      onError?.(error, errorDescription);
+      setExchangeError(errorDescription || error);
+      setExchangeState("error");
+      return;
+    }
+
     const payload: Record<string, string> = {};
     if (code) payload.code = code;
     if (state) payload.state = state;
-    if (error) payload.error = error;
-    if (errorDescription) payload.error_description = errorDescription;
 
-    // Channel 1: postMessage to opener with strict origin check
+    // Mode A: Popup Window Flow (window.opener exists)
     if (window.opener) {
       try {
         window.opener.postMessage(
@@ -48,37 +62,75 @@ export function OAuthCallbackHandler({
       } catch {
         // Fall back to localStorage channel
       }
-    }
 
-    // Channel 2: localStorage storage event broadcast
-    try {
-      window.localStorage.setItem(
-        "zorveus_oauth_callback_result",
-        JSON.stringify({
-          ...payload,
-          timestamp: Date.now()
-        })
-      );
-    } catch {
-      // Ignore storage write errors
-    }
-
-    if (code) {
-      onSuccess?.(code, state);
-    } else if (error) {
-      onError?.(error, errorDescription);
-    }
-
-    // Allow 250ms for postMessage and localStorage events to flush before closing popup
-    setTimeout(() => {
       try {
-        window.close();
-        setClosed(true);
+        window.localStorage.setItem(
+          "zorveus_oauth_callback_result",
+          JSON.stringify({
+            ...payload,
+            timestamp: Date.now()
+          })
+        );
       } catch {
-        setClosed(true);
+        // Ignore storage write errors
       }
-    }, 250);
-  }, [onSuccess, onError]);
+
+      if (code) {
+        onSuccess?.(code, state);
+      }
+
+      setTimeout(() => {
+        try {
+          window.close();
+          setClosed(true);
+        } catch {
+          setClosed(true);
+        }
+      }, 250);
+      return;
+    }
+
+    // Mode B: Direct SPA Redirect Flow (no window.opener)
+    if (!code || !context) return;
+
+    const codeVerifier = window.sessionStorage.getItem("zorveus_oauth_verifier");
+    if (!codeVerifier) {
+      const msg = "Missing OAuth PKCE code verifier in session storage.";
+      onError?.("missing_verifier", msg);
+      setExchangeError(msg);
+      setExchangeState("error");
+      return;
+    }
+
+    setExchangeState("exchanging");
+
+    ZorveusOAuth.exchangeToken({
+      clientId: context.clientId,
+      clientSecret: context.clientSecret,
+      code,
+      codeVerifier,
+      redirectUri: context.redirectUri,
+      baseURL: context.authBaseUrl
+    })
+      .then((tokenRes: OAuthTokenResponse) => {
+        window.sessionStorage.removeItem("zorveus_oauth_verifier");
+        window.sessionStorage.removeItem("zorveus_oauth_state");
+
+        context.setOAuthSession(tokenRes);
+        setExchangeState("done");
+        onSuccess?.(code, state, tokenRes);
+
+        if (redirectTo && typeof window !== "undefined") {
+          window.location.replace(redirectTo);
+        }
+      })
+      .catch((err: unknown) => {
+        const e = err instanceof Error ? err.message : String(err);
+        setExchangeError(e);
+        setExchangeState("error");
+        onError?.("exchange_failed", e);
+      });
+  }, [context, onSuccess, onError, redirectTo]);
 
   if (typeof window === "undefined") return null;
 
@@ -88,6 +140,9 @@ export function OAuthCallbackHandler({
   const errorDescription = urlParams.get("error_description");
 
   if (!code && !error) return null;
+
+  const displayError = errorDescription || error || exchangeError;
+  const isPending = exchangeState === "exchanging";
 
   return (
     <div
@@ -118,18 +173,22 @@ export function OAuthCallbackHandler({
             width: "48px",
             height: "48px",
             borderRadius: "50%",
-            backgroundColor: error ? "#FEF2F2" : "#ECFDF5",
+            backgroundColor: displayError ? "#FEF2F2" : isPending ? "#EFF6FF" : "#ECFDF5",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             margin: "0 auto 16px auto"
           }}
         >
-          {error ? (
+          {displayError ? (
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
               <line x1="15" y1="9" x2="9" y2="15" />
               <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+          ) : isPending ? (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
             </svg>
           ) : (
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
@@ -139,13 +198,19 @@ export function OAuthCallbackHandler({
         </div>
 
         <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#0F172A", marginBottom: "8px" }}>
-          {error ? "Authorization Failed" : "Wallet Connection Complete!"}
+          {displayError
+            ? "Authorization Failed"
+            : isPending
+              ? "Connecting Your AI Wallet..."
+              : "Wallet Connection Complete!"}
         </h2>
 
         <p style={{ fontSize: "14px", color: "#64748B", lineHeight: 1.5, marginBottom: "20px" }}>
-          {error
-            ? errorDescription || error
-            : "Your Zorveus AI Wallet authorization was successful. You may close this window now."}
+          {displayError
+            ? displayError
+            : isPending
+              ? "Exchanging authorization credentials with Zorveus securely via PKCE..."
+              : "Your Zorveus AI Wallet authorization was successful."}
         </p>
 
         {closed && (

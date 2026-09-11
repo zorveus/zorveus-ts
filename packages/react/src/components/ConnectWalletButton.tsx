@@ -22,6 +22,14 @@ export interface ConnectWalletButtonProps {
   scopes?: string[];
 
   /**
+   * OAuth consent authorization mode.
+   * "popup" opens a dedicated centered popup window.
+   * "redirect" performs a full-page redirection.
+   * @default "popup"
+   */
+  authMode?: "popup" | "redirect";
+
+  /**
    * Callback invoked when wallet connection succeeds.
    */
   onSuccess?: (data: { accessToken: string; appConnectionId?: string }) => void;
@@ -82,6 +90,7 @@ export function ConnectWalletButton({
   variant = "default",
   size = "md",
   scopes = ["inference:write", "models:*"],
+  authMode = "popup",
   onSuccess,
   onError,
   children = "Connect AI Wallet",
@@ -107,7 +116,7 @@ export function ConnectWalletButton({
   const handleClick = async () => {
     if (disabled || isLoading) return;
     try {
-      await connect(scopes);
+      await connect({ scopes, mode: authMode });
       if (accessToken) {
         onSuccess?.({
           accessToken,

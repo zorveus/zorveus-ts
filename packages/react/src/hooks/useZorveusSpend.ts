@@ -48,6 +48,7 @@ export function useZorveusSpend(options: UseZorveusSpendOptions = {}): UseZorveu
   const { autoFetch = true } = options;
   const context = useOptionalZorveusContext();
   const client = context?.client ?? null;
+  const isLoadingAuth = context?.isLoadingAuth ?? false;
 
   const [usage, setUsage] = useState<InferenceKeyUsageResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -63,15 +64,20 @@ export function useZorveusSpend(options: UseZorveusSpendOptions = {}): UseZorveu
 
   const fetchUsage = useCallback(async () => {
     if (!client) {
-      if (isMountedRef.current) {
-        setIsLoading(false);
-        setUsage(null);
-        setError(
-          new AuthenticationError("Authentication required. Connect your AI wallet to view spend and usage.", {
-            code: "unauthenticated"
-          })
-        );
+      if (!isMountedRef.current) return;
+      if (isLoadingAuth) {
+        setIsLoading(true);
+        setError(null);
+        return;
       }
+
+      setIsLoading(false);
+      setUsage(null);
+      setError(
+        new AuthenticationError("Authentication required. Connect your AI wallet to view spend and usage.", {
+          code: "unauthenticated"
+        })
+      );
       return;
     }
 
