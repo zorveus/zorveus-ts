@@ -1,6 +1,6 @@
 {
   "name": "@zorveus/react",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "React Context, Hooks, and UI Components for Zorveus AI Wallet & Gateway Integration",
   "repository": {
     "type": "git",
@@ -30,9 +30,9 @@
     "test": "vitest run"
   },
   "peerDependencies": {
+    "openai": "^4.0.0",
     "react": ">=18.0.0",
-    "react-dom": ">=18.0.0",
-    "openai": "^4.0.0"
+    "react-dom": ">=18.0.0"
   },
   "peerDependenciesMeta": {
     "openai": {
