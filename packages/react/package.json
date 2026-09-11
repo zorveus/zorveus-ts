@@ -40,7 +40,7 @@
     }
   },
   "dependencies": {
-    "@zorveus/sdk": "^0.2.0"
+    "@zorveus/sdk": "^0.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",
