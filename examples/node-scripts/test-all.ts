@@ -327,6 +327,32 @@ async function generateImage(): Promise<void> {
   console.log(image?.url ? `Generated image URL: ${image.url}` : "No image returned.");
 }
 
+async function generateVideo(): Promise<void> {
+  const client = await getOpenAIAdapter(true);
+  const video = await client.videos.createAndPoll({
+    model: await ask(
+      "Video model",
+      process.env.ZORVEUS_VIDEO_MODEL || "gemini/veo-3.1-lite-generate-preview"
+    ),
+    prompt: await ask("Video prompt", "A paper airplane gliding over a geometric city"),
+    seconds: await ask("Duration in seconds", "4") as "4",
+    size: await ask("Video size", "1280x720") as "1280x720"
+  });
+
+  console.dir(video, { depth: null });
+  if ((video.status as string) !== "completed") {
+    throw new Error(`Video generation ended with status ${video.status}`);
+  }
+
+  const outputPath = path.resolve(
+    await ask("Output video path", "examples/output/generated-video.mp4")
+  );
+  const content = await client.videos.downloadContent(video.id);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, Buffer.from(await content.arrayBuffer()));
+  console.log(`Saved generated video to ${outputPath}`);
+}
+
 async function moderateContent(): Promise<void> {
   const response = await (await getOpenAIAdapter(true)).moderations.create({
     model: await ask("Moderation model", process.env.ZORVEUS_MODERATION_MODEL || "omni-moderation-latest"),
@@ -404,6 +430,7 @@ const actions: RunnerAction[] = [
   { name: "Transcribe an audio file", run: transcribeAudio, changesData: true },
   { name: "Translate an audio file", run: translateAudio, changesData: true },
   { name: "Generate an image", run: generateImage, changesData: true },
+  { name: "Generate a video", run: generateVideo, changesData: true },
   { name: "Moderate content", run: moderateContent, changesData: true },
   { name: "List gateway files", run: listGatewayFiles },
   { name: "Check finance error parsing", run: testErrorParser }

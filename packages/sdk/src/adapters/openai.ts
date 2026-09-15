@@ -1,5 +1,8 @@
 import OpenAI from "openai";
+import { ZorveusVideosResource } from "./videos";
 export { parseZorveusGatewayError } from "../errors/zorveus-error";
+export { ZorveusVideosResource } from "./videos";
+export type { VideoPollOptions, ZorveusVideoCreateParams } from "./videos";
 
 export interface ZorveusOpenAIOptions {
   apiKey?: string;
@@ -74,6 +77,19 @@ function parseFormMetadata(value: FormDataEntryValue | null): Record<string, unk
   }
 }
 
+function readFormMetadata(form: FormData): Record<string, unknown> {
+  const metadata = parseFormMetadata(form.get("metadata"));
+  const serializedKeys: string[] = [];
+  for (const [key, value] of form.entries()) {
+    const match = /^metadata\[([^\]]+)\]$/.exec(key);
+    if (!match || typeof value !== "string") continue;
+    metadata[match[1]] = value;
+    serializedKeys.push(key);
+  }
+  serializedKeys.forEach((key) => form.delete(key));
+  return metadata;
+}
+
 function createAttributionFetch(
   baseFetch: typeof globalThis.fetch,
   defaults: AttributionDefaults
@@ -93,7 +109,7 @@ function createAttributionFetch(
         user: form.get("user"),
         external_user_id: form.get("external_user_id"),
         product_end_user_id: form.get("product_end_user_id"),
-        metadata: parseFormMetadata(form.get("metadata"))
+        metadata: readFormMetadata(form)
       };
       const metadata = buildAttributionMetadata(body, defaults);
       if (metadata) form.set("metadata", JSON.stringify(metadata));
@@ -107,6 +123,8 @@ function createAttributionFetch(
  * OpenAI client configured for Zorveus with attribution on JSON and multipart requests.
  */
 export class ZorveusOpenAI extends OpenAI {
+  override videos: ZorveusVideosResource;
+
   constructor(options: ZorveusOpenAIOptions = {}) {
     const apiKey = options.apiKey ?? process.env.ZORVEUS_INFERENCE_KEY;
     if (!apiKey) {
@@ -146,5 +164,7 @@ export class ZorveusOpenAI extends OpenAI {
       fetch: createAttributionFetch(baseFetch ?? globalThis.fetch.bind(globalThis), defaults),
       ...restOptions
     });
+
+    this.videos = new ZorveusVideosResource(this);
   }
 }
