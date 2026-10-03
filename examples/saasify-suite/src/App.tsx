@@ -565,7 +565,7 @@ function UserDetailPage({
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0F172A" }}>{user.name}</h1>
                 <span className={backendUser?.status === "active" ? "badge-emerald" : "badge-neutral"}>
-                  {backendUser ? backendUser.status.toUpperCase() : "SYNCING"}
+                  {backendUser?.status ? backendUser.status.toUpperCase() : "SYNCING"}
                 </span>
                 <span className="badge-neutral">{user.tier} Plan</span>
                 <button

@@ -1,17 +1,17 @@
 import type { HTTPTransport } from "../http/transport";
 import { assertDecimalString } from "../utils/decimal";
 import type { RequestOptions } from "../types/client";
-import type {
-  UpsertProductUserParams,
-  UpsertProductUserResponse,
+import {
   ProductUserResponse,
-  GetProductUserByExternalIdParams,
-  GetProductUserCreditSummaryByExternalIdParams,
-  ProductUserCreditSummaryResponse,
-  GrantCreditByExternalIdParams,
-  GrantProductUserCreditsResponse,
-  ProductUserCreditGrantListResponse,
-  ListCreditGrantsByExternalIdParams
+  type UpsertProductUserParams,
+  type UpsertProductUserResponse,
+  type GetProductUserByExternalIdParams,
+  type GetProductUserCreditSummaryByExternalIdParams,
+  type ProductUserCreditSummaryResponse,
+  type GrantCreditByExternalIdParams,
+  type GrantProductUserCreditsResponse,
+  type ProductUserCreditGrantListResponse,
+  type ListCreditGrantsByExternalIdParams
 } from "../types/product-users";
 
 export class ProductUsers {
@@ -39,12 +39,17 @@ export class ProductUsers {
 
     const query = params.orgId ? { org_id: params.orgId } : undefined;
 
-    return this.transport.request<UpsertProductUserResponse>("/product-users/by-external-id", {
+    const res = await this.transport.request<UpsertProductUserResponse>("/product-users/by-external-id", {
       method: "PUT",
       body: payload,
       query,
       ...options
     });
+
+    return {
+      ...res,
+      product_user: new ProductUserResponse(res.product_user)
+    };
   }
 
   /**
@@ -74,11 +79,13 @@ export class ProductUsers {
       query.org_id = params.orgId;
     }
 
-    return this.transport.request<ProductUserResponse>("/product-users/by-external-id", {
+    const data = await this.transport.request<ProductUserResponse>("/product-users/by-external-id", {
       method: "GET",
       query,
       ...options
     });
+
+    return new ProductUserResponse(data);
   }
 
   /**
@@ -136,7 +143,7 @@ export class ProductUsers {
 
     const query = params.orgId ? { org_id: params.orgId } : undefined;
 
-    return this.transport.request<GrantProductUserCreditsResponse>(
+    const res = await this.transport.request<GrantProductUserCreditsResponse>(
       "/product-users/by-external-id/credit-grants",
       {
         method: "POST",
@@ -145,6 +152,11 @@ export class ProductUsers {
         ...options
       }
     );
+
+    return {
+      ...res,
+      product_user: new ProductUserResponse(res.product_user)
+    };
   }
 
   /**

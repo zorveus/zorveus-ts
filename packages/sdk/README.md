@@ -241,15 +241,26 @@ The product-user resource provides these methods:
 | --- | --- |
 | `createOrUpdate(params)` | Create or update a user by external ID |
 | `upsert(params)` | Alias for `createOrUpdate()` |
-| `get(productEndUserId)` | Get a user by Zorveus product-user ID |
 | `getByExternalId(params)` | Get a user by external ID |
-| `list(params)` | List product users |
 | `getCreditSummaryByExternalId(params)` | Get the credit balance and consumption summary |
-| `grantCredit(productEndUserId, params)` | Grant credit by Zorveus product-user ID |
 | `grantCreditByExternalId(params)` | Grant credit by external ID |
-| `listCreditGrants(userIdentifier, params)` | List grants by user identifier |
 | `listCreditGrantsByExternalId(params)` | List grants by external ID |
-| `revokeCredit(productEndUserId, grantId)` | Revoke an active grant |
+
+### Financial helper getters
+
+`ProductUserResponse` (and its alias `ProductUser`) returned by `getByExternalId` provides helpers for calculating live spendable balances and caps:
+
+- `getAvailableAllowance()`: Returns the total spendable amount right now across base allowance and promotional credits.
+- `getTotalAvailableToSpend()`: Alias for `getAvailableAllowance()`.
+- `getAvailableCredits()`: Returns spendable promotional credits.
+- `getTotalCredits()`: Alias for `getAvailableCredits()`.
+- `getTotalAllowance()`: Returns configured cap amount (`null` if uncapped). Ignores `direct_cap`.
+- `getCapSpent()`: Returns amount spent against the active cap in the current period. Ignores `direct_cap`.
+- `getRemainingBaseAllowance()`: Returns remaining base allowance before promotional credits are touched (`null` if not configured).
+- `getUsageCost(period?)`: Returns sell cost for `"this_period"` (default) or `"total"`.
+- `hasAvailableAllowance()`: Returns `true` if `parseFloat(getAvailableAllowance()) > 0`.
+
+Convenience getter properties (`totalAvailableAllowance`, `totalAvailableToSpend`, `totalCredits`, `capSpent`) are also available.
 
 ## Manage BYOK credentials
 

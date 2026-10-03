@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ZorveusServiceClient } from "../src/index";
+import { ZorveusServiceClient, ProductUserResponse, ProductUser } from "../src/index";
 
 describe("Product Users Management", () => {
   it("upserts product user and returns UpsertProductUserResponse", async () => {
@@ -259,5 +259,248 @@ describe("Product Users Management", () => {
         amount: "INVALID_50"
       })
     ).rejects.toThrow("must be a valid decimal string");
+  });
+
+  describe("ProductUserResponse financial helper getters", () => {
+    it("computes financial getters accurately with a full allowance payload", () => {
+      const user = new ProductUserResponse({
+        app_id: "app_123",
+        external_user_id: "usr_full",
+        allowance: {
+          app_connection_id: "conn_123",
+          cap_source: "product_end_user",
+          cap_rule_id: "rule_123",
+          credit_mode: "enforce",
+          overrun_policy: "limit_output",
+          currency: "USD",
+          period: "monthly",
+          cap_amount: "100.000000000000",
+          spent_this_period: "25.000000000000",
+          remaining_base_allowance: "75.000000000000",
+          available_credits: "15.000000000000",
+          available_allowance: "90.000000000000"
+        },
+        cap: {
+          source: "product_end_user",
+          cap_rule_id: "rule_123",
+          amount: "100.000000000000",
+          currency: "USD",
+          period: "monthly",
+          spent_this_period: "25.000000000000"
+        },
+        credits: {
+          currency: "USD",
+          available_credits: "15.000000000000",
+          active_grant_count: 1,
+          expiring_soon_amount: "0.000000000000",
+          spent_this_month: "5.000000000000",
+          spent_total: "10.000000000000"
+        },
+        usage: {
+          this_period: {
+            sell_cost: "25.000000000000",
+            input_tokens: 1000,
+            output_tokens: 500,
+            total_tokens: 1500,
+            request_count: 10
+          },
+          total: {
+            sell_cost: "50.000000000000",
+            input_tokens: 2000,
+            output_tokens: 1000,
+            total_tokens: 3000,
+            request_count: 20
+          }
+        }
+      });
+
+      expect(user.getAvailableAllowance()).toBe("90.000000000000");
+      expect(user.getTotalAvailableToSpend()).toBe("90.000000000000");
+      expect(user.totalAvailableAllowance).toBe("90.000000000000");
+      expect(user.totalAvailableToSpend).toBe("90.000000000000");
+
+      expect(user.getAvailableCredits()).toBe("15.000000000000");
+      expect(user.getTotalCredits()).toBe("15.000000000000");
+      expect(user.totalCredits).toBe("15.000000000000");
+
+      expect(user.getTotalAllowance()).toBe("100.000000000000");
+      expect(user.getCapSpent()).toBe("25.000000000000");
+      expect(user.capSpent).toBe("25.000000000000");
+      expect(user.getRemainingBaseAllowance()).toBe("75.000000000000");
+
+      expect(user.getUsageCost("this_period")).toBe("25.000000000000");
+      expect(user.getUsageCost("total")).toBe("50.000000000000");
+      expect(user.hasAvailableAllowance()).toBe(true);
+    });
+
+    it("falls back to cap and credits when allowance is missing", () => {
+      const user = new ProductUserResponse({
+        app_id: "app_123",
+        external_user_id: "usr_legacy",
+        cap: {
+          source: "app_connection",
+          amount: "50.000000000000",
+          spent_this_period: "10.000000000000"
+        },
+        credits: {
+          currency: "USD",
+          available_credits: "20.000000000000",
+          active_grant_count: 1,
+          expiring_soon_amount: "0.000000000000",
+          spent_this_month: "0.000000000000",
+          spent_total: "0.000000000000"
+        }
+      });
+
+      expect(user.getAvailableAllowance()).toBe("20.000000000000");
+      expect(user.getTotalAvailableToSpend()).toBe("20.000000000000");
+      expect(user.getAvailableCredits()).toBe("20.000000000000");
+      expect(user.getTotalCredits()).toBe("20.000000000000");
+      expect(user.getTotalAllowance()).toBe("50.000000000000");
+      expect(user.getCapSpent()).toBe("10.000000000000");
+      expect(user.getRemainingBaseAllowance()).toBeNull();
+      expect(user.hasAvailableAllowance()).toBe(true);
+    });
+
+    it("defaults correctly when all allowance and cap fields are missing", () => {
+      const user = new ProductUserResponse({
+        app_id: "app_123",
+        external_user_id: "usr_empty"
+      });
+
+      expect(user.getAvailableAllowance()).toBe("0.000000000000");
+      expect(user.getTotalAvailableToSpend()).toBe("0.000000000000");
+      expect(user.getAvailableCredits()).toBe("0.000000000000");
+      expect(user.getTotalCredits()).toBe("0.000000000000");
+      expect(user.getTotalAllowance()).toBeNull();
+      expect(user.getCapSpent()).toBe("0.000000000000");
+      expect(user.getRemainingBaseAllowance()).toBeNull();
+      expect(user.getUsageCost()).toBe("0.000000000000");
+      expect(user.getUsageCost("total")).toBe("0.000000000000");
+      expect(user.hasAvailableAllowance()).toBe(false);
+    });
+
+    it("ignores direct_cap when resolving active cap totals and spent amounts", () => {
+      const user = new ProductUserResponse({
+        app_id: "app_123",
+        external_user_id: "usr_direct_only",
+        direct_cap: {
+          source: "product_end_user",
+          amount: "100.000000000000",
+          spent_this_period: "40.000000000000",
+          status: "disabled"
+        }
+      });
+
+      expect(user.getTotalAllowance()).toBeNull();
+      expect(user.getCapSpent()).toBe("0.000000000000");
+    });
+
+    it("copies this_month to this_period when this_period is missing", () => {
+      const user = new ProductUserResponse({
+        app_id: "app_123",
+        external_user_id: "usr_compat",
+        usage: {
+          this_month: {
+            sell_cost: "12.340000000000",
+            input_tokens: 100,
+            output_tokens: 50,
+            total_tokens: 150,
+            request_count: 2
+          }
+        }
+      });
+
+      expect(user.usage?.this_period).toBeDefined();
+      expect(user.usage?.this_period?.sell_cost).toBe("12.340000000000");
+      expect(user.getUsageCost("this_period")).toBe("12.340000000000");
+    });
+
+    it("ProductUser.from wraps plain objects and hydrates methods", () => {
+      const raw = {
+        app_id: "app_123",
+        external_user_id: "usr_plain",
+        allowance: {
+          available_allowance: "42.000000000000"
+        }
+      };
+
+      const user = ProductUser.from(raw);
+      expect(user).toBeInstanceOf(ProductUserResponse);
+      expect(user.getAvailableAllowance()).toBe("42.000000000000");
+      expect(user.hasAvailableAllowance()).toBe(true);
+
+      const same = ProductUser.from(user);
+      expect(same).toBe(user);
+    });
+
+    it("retrieves product user via getByExternalId and returns hydrated ProductUserResponse", async () => {
+      const mockResponse = {
+        product_end_user_id: "peu_001",
+        app_id: "app_test",
+        external_user_id: "usr_test",
+        allowance: {
+          cap_amount: "75.000000000000",
+          spent_this_period: "15.000000000000",
+          available_allowance: "60.000000000000"
+        }
+      };
+
+      global.fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        })
+      );
+
+      const client = new ZorveusServiceClient({ apiKey: "zrv_service_key_123" });
+      const user = await client.productUsers.getByExternalId({
+        appId: "app_test",
+        externalUserId: "usr_test"
+      });
+
+      expect(user).toBeInstanceOf(ProductUserResponse);
+      expect(user.getAvailableAllowance()).toBe("60.000000000000");
+      expect(user.getTotalAllowance()).toBe("75.000000000000");
+      expect(user.getCapSpent()).toBe("15.000000000000");
+      expect(user.hasAvailableAllowance()).toBe(true);
+    });
+
+    it("supports this_month in getUsageCost and synchronizes credits/credit_summary", () => {
+      const user = new ProductUserResponse({
+        app_id: "app_123",
+        external_user_id: "usr_sync",
+        credit_summary: {
+          currency: "USD",
+          available_credits: "30.000000000000",
+          active_grant_count: 1,
+          expiring_soon_amount: "0.000000000000",
+          spent_this_month: "5.000000000000",
+          spent_total: "5.000000000000"
+        },
+        usage: {
+          this_period: {
+            sell_cost: "8.500000000000",
+            input_tokens: 10,
+            output_tokens: 10,
+            total_tokens: 20,
+            request_count: 1
+          }
+        }
+      });
+
+      expect(user.credits).toBeDefined();
+      expect(user.credits?.available_credits).toBe("30.000000000000");
+      expect(user.getAvailableCredits()).toBe("30.000000000000");
+      expect(user.getUsageCost("this_month")).toBe("8.500000000000");
+    });
+
+    it("does not expose dashboard routes on productUsers", () => {
+      const client = new ZorveusServiceClient({ apiKey: "zrv_service_key_123" });
+      const resource = client.productUsers as unknown as Record<string, unknown>;
+
+      expect(resource.list).toBeUndefined();
+      expect(resource.get).toBeUndefined();
+    });
   });
 });

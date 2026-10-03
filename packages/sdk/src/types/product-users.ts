@@ -5,6 +5,9 @@ export type ProductUserStatus = "active" | "suspended";
  */
 export type CreditMode = "disabled" | "track_only" | "enforce_if_present" | "enforce";
 export type AppConnectionCreditMode = CreditMode;
+export type OverrunPolicy = "limit_output" | "allow_overrun" | "carry_overrun_forward";
+
+export type CapPeriod = "daily" | "weekly" | "monthly" | "lifetime";
 
 /**
  * Error parameters returned by the gateway when an enforced allowance is insufficient.
@@ -25,35 +28,60 @@ export interface ProductUserAllowanceInsufficientParams {
 }
 
 export interface ProductUserCapResponse {
-  source: string;
-  cap_rule_id: string;
-  amount: string; // Decimal string
-  currency: string;
-  period: "daily" | "weekly" | "monthly" | "lifetime" | string;
-  spent_this_period: string; // Decimal string
-  reset_at: string | null;
-  status: string;
-  updated_at: string;
+  source?: "product_end_user" | "app_connection" | null;
+  cap_rule_id?: string | null;
+  amount?: string | null; // 12-decimal string
+  currency?: string; // default "USD"
+  period?: CapPeriod | string | null;
+  spent_this_period?: string | null; // 12-decimal string
+  period_start?: string | null;
+  period_end?: string | null;
+  reset_at?: string | null;
+  status?: "active" | "disabled" | string | null;
+  updated_at?: string | null;
 }
 
-export interface ProductUserUsageMetrics {
-  sell_cost: string; // Decimal string
-  /** Reference-priced usage consumed against caps and credits. */
-  virtual_spend?: string;
-  /** Upstream provider cost, when the caller may view it. */
-  provider_cost?: string;
-  /** Usage beyond available allowance in track-only or overrun cases. */
-  uncovered_virtual_spend?: string;
+export type ProductUserCap = ProductUserCapResponse;
+
+export interface UsageBucket {
+  sell_cost: string; // 12-decimal string, e.g. "0.000045360000"
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
   request_count: number;
+  virtual_spend?: string;
+  provider_cost?: string;
+  uncovered_virtual_spend?: string;
 }
 
+export type ProductUserUsageMetrics = UsageBucket;
+
 export interface ProductUserUsageSummary {
-  this_month: ProductUserUsageMetrics;
-  total: ProductUserUsageMetrics;
+  this_period?: UsageBucket | null;
+  this_month?: UsageBucket | null; // fallback alias for this_period
+  period_start?: string | null; // ISO 8601 UTC
+  period_end?: string | null; // ISO 8601 UTC
+  total?: UsageBucket | null;
 }
+
+export interface ProductUserAllowanceResponse {
+  app_connection_id?: string | null;
+  cap_source?: "product_end_user" | "app_connection" | null;
+  cap_rule_id?: string | null;
+  credit_mode?: CreditMode | null;
+  overrun_policy?: OverrunPolicy | null;
+  currency?: string; // default "USD"
+  period?: CapPeriod | string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+  cap_amount?: string | null; // 12-decimal string
+  spent_this_period?: string | null; // 12-decimal string
+  remaining_base_allowance?: string | null; // 12-decimal string
+  available_credits?: string | null; // 12-decimal string
+  available_allowance?: string | null; // 12-decimal string
+}
+
+export type ProductUserAllowance = ProductUserAllowanceResponse;
 
 export interface ProductUserCreditSummaryResponse {
   currency: string;
@@ -70,21 +98,185 @@ export interface ProductUserCreditSummaryResponse {
   active_grants_count?: number;
 }
 
-export interface ProductUserResponse {
-  product_end_user_id: string;
-  org_id: string;
+export type CreditSummary = ProductUserCreditSummaryResponse;
+
+export interface ProductUserData {
+  product_end_user_id?: string | null;
+  id?: string | null;
+  org_id?: string | null;
   app_id: string;
   external_user_id: string;
-  display_name: string | null;
-  email_hash: string | null;
-  status: ProductUserStatus;
-  metadata: Record<string, unknown> | null;
-  usage?: ProductUserUsageSummary | Record<string, unknown>;
+  display_name?: string | null;
+  email?: string | null;
+  email_hash?: string | null;
+  status?: "active" | "disabled" | "deleted" | string | null;
+  metadata?: Record<string, unknown> | null;
+  allowance_starts_at?: string | null;
+  last_app_connection_id?: string | null;
+
+  usage?: ProductUserUsageSummary | null;
+  cap?: ProductUserCapResponse | null; // active effective cap (from user or key)
+  direct_cap?: ProductUserCapResponse | null; // user-specific cap, even if disabled
+  credits?: CreditSummary | null;
+  credit_summary?: CreditSummary | null;
+  allowance?: ProductUserAllowanceResponse | null;
+
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export class ProductUserResponse implements ProductUserData {
+  product_end_user_id?: string | null;
+  id?: string | null;
+  org_id?: string | null;
+  app_id!: string;
+  external_user_id!: string;
+  display_name?: string | null;
+  email?: string | null;
+  email_hash?: string | null;
+  status?: "active" | "disabled" | "deleted" | string | null;
+  metadata?: Record<string, unknown> | null;
+  allowance_starts_at?: string | null;
+  last_app_connection_id?: string | null;
+
+  usage?: ProductUserUsageSummary | null;
   cap?: ProductUserCapResponse | null;
-  credits?: ProductUserCreditSummaryResponse | null;
+  direct_cap?: ProductUserCapResponse | null;
+  credits?: CreditSummary | null;
+  credit_summary?: CreditSummary | null;
+  allowance?: ProductUserAllowanceResponse | null;
+
+  created_at?: string | null;
+  updated_at?: string | null;
+
+  constructor(data?: Partial<ProductUserData>) {
+    if (!data) return;
+    Object.assign(this, data);
+
+    if (this.usage) {
+      if (!this.usage.this_period && this.usage.this_month) {
+        this.usage.this_period = { ...this.usage.this_month };
+      }
+      if (!this.usage.this_month && this.usage.this_period) {
+        this.usage.this_month = { ...this.usage.this_period };
+      }
+    }
+
+    if (!this.credit_summary && this.credits) {
+      this.credit_summary = this.credits;
+    } else if (!this.credits && this.credit_summary) {
+      this.credits = this.credit_summary;
+    }
+  }
+
+  static from(data?: Partial<ProductUserData> | ProductUserResponse): ProductUserResponse {
+    if (data instanceof ProductUserResponse) {
+      return data;
+    }
+    return new ProductUserResponse(data);
+  }
+
+  getAvailableAllowance(): string {
+    if (this.allowance?.available_allowance != null && this.allowance.available_allowance !== "") {
+      return this.allowance.available_allowance;
+    }
+
+    const credits = this.credits?.available_credits ?? this.credit_summary?.available_credits;
+    if (credits != null && credits !== "") {
+      return credits;
+    }
+
+    return "0.000000000000";
+  }
+
+  getTotalAvailableToSpend(): string {
+    return this.getAvailableAllowance();
+  }
+
+  getAvailableCredits(): string {
+    const credits = this.credits?.available_credits ?? this.credit_summary?.available_credits;
+    if (credits != null && credits !== "") {
+      return credits;
+    }
+
+    if (this.allowance?.available_credits != null && this.allowance.available_credits !== "") {
+      return this.allowance.available_credits;
+    }
+
+    return "0.000000000000";
+  }
+
+  getTotalCredits(): string {
+    return this.getAvailableCredits();
+  }
+
+  getTotalAllowance(): string | null {
+    if (this.allowance?.cap_amount != null && this.allowance.cap_amount !== "") {
+      return this.allowance.cap_amount;
+    }
+
+    if (this.cap?.amount != null && this.cap.amount !== "") {
+      return this.cap.amount;
+    }
+
+    return null;
+  }
+
+  getCapSpent(): string {
+    if (this.allowance?.spent_this_period != null && this.allowance.spent_this_period !== "") {
+      return this.allowance.spent_this_period;
+    }
+
+    if (this.cap?.spent_this_period != null && this.cap.spent_this_period !== "") {
+      return this.cap.spent_this_period;
+    }
+
+    return "0.000000000000";
+  }
+
+  getRemainingBaseAllowance(): string | null {
+    if (this.allowance?.remaining_base_allowance != null && this.allowance.remaining_base_allowance !== "") {
+      return this.allowance.remaining_base_allowance;
+    }
+
+    return null;
+  }
+
+  getUsageCost(period: "this_period" | "this_month" | "total" = "this_period"): string {
+    if (period === "total") {
+      return this.usage?.total?.sell_cost || "0.000000000000";
+    }
+
+    return (
+      this.usage?.this_period?.sell_cost ||
+      this.usage?.this_month?.sell_cost ||
+      "0.000000000000"
+    );
+  }
+
+  hasAvailableAllowance(): boolean {
+    return parseFloat(this.getAvailableAllowance()) > 0;
+  }
+
+  get totalAvailableAllowance(): string {
+    return this.getAvailableAllowance();
+  }
+
+  get totalAvailableToSpend(): string {
+    return this.getTotalAvailableToSpend();
+  }
+
+  get totalCredits(): string {
+    return this.getTotalCredits();
+  }
+
+  get capSpent(): string {
+    return this.getCapSpent();
+  }
 }
 
 export type ProductUser = ProductUserResponse;
+export const ProductUser = ProductUserResponse;
 
 export interface UpsertProductUserResponse {
   product_user: ProductUserResponse;
