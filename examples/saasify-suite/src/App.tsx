@@ -1241,6 +1241,7 @@ Provide:
     try {
       const service = getServiceClient();
       await service.productUsers.createOrUpdate({
+        appId,
         externalUserId: inspectedUser.id,
         displayName: inspectedUser.name,
         email: inspectedUser.email,
@@ -1335,6 +1336,7 @@ Provide:
     try {
       const service = getServiceClient();
       await service.productUsers.createOrUpdate({
+        appId,
         externalUserId: newId,
         displayName: newUserName,
         email: newUserEmail,
