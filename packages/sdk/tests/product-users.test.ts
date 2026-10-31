@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ZorveusServiceClient, ProductUserResponse, ProductUser } from "../src/index";
+import { ZorveusServiceClient, ProductUserResponse, ProductUser, formatGatewayMetadata } from "../src/index";
 
 describe("Product Users Management", () => {
   it("upserts product user and returns UpsertProductUserResponse", async () => {
@@ -503,4 +503,337 @@ describe("Product Users Management", () => {
       expect(resource.get).toBeUndefined();
     });
   });
+});
+
+
+it("uses the effective prorated allowance rather than the configured cap", () => {
+  const user = new ProductUserResponse({
+    app_id: "app_test", external_user_id: "customer_test", cap: { amount: "50.000000000000" },
+    allowance: { cap_amount: "30.000000000000", available_allowance: "22.000000000000",
+      adjustment: { type: "prorate_increase", configured_cap_amount: "50.000000000000", effective_at: "2026-06-16T00:00:00Z" } },
+  });
+  expect(user.getTotalAllowance()).toBe("30.000000000000");
+  expect(user.getAvailableAllowance()).toBe("22.000000000000");
+  expect(user.allowance?.adjustment?.configured_cap_amount).toBe(user.cap?.amount);
+});
+
+
+it("formats the proration instruction even without profile metadata", () => {
+  expect(formatGatewayMetadata({ externalUserId: "customer_test", allowanceChange: "prorate_increase" })).toEqual({
+    external_user_id: "customer_test",
+    product_user: { allowance_change: "prorate_increase" },
+  });
+});
+
+
+it.each([undefined, null, "2026-07-17T09:00:00Z"])("serializes the allowance anchor without clearing it on omission: %s", async (anchor) => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    created: false, product_user: { app_id: "app_test", external_user_id: "customer_test", allowance_starts_at: anchor }
+  })));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch });
+  const result = await service.productUsers.createOrUpdate({
+    appId: "app_test", externalUserId: "customer_test", allowanceStartsAt: anchor
+  });
+  const payload = JSON.parse(fetch.mock.calls[0][1].body);
+  expect(Object.hasOwn(payload, "allowance_starts_at")).toBe(anchor !== undefined);
+  if (anchor !== undefined) expect(payload.allowance_starts_at).toBe(anchor);
+  expect(result.product_user.external_user_id).toBe(payload.external_user_id);
+});
+
+it("omits an unspecified credit source so the backend can apply its default", async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    product_user: { app_id: "app_test", external_user_id: "customer_test" },
+    credit_grant: { credit_grant_id: "grant_test" }, credit_summary: { available_credits: "3.00" }
+  }), { status: 201 }));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch });
+  const result = await service.productUsers.grantCreditByExternalId({
+    appId: "app_test", externalUserId: "customer_test", amount: "3.00"
+  });
+  const payload = JSON.parse(fetch.mock.calls[0][1].body);
+  expect(payload).not.toHaveProperty("source");
+  expect(payload.amount).toBe(result.credit_summary.available_credits);
+});
+
+it("retrieves carried allowance debt with the customer identity and currency", async () => {
+  const debt = { outstanding_amount: "1.25", repaid_by_credits_total: "2.00", repaid_by_base_total: "3.00", currency: "USD", oldest_debt_at: null };
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(debt)));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch });
+  expect(await service.productUsers.getAllowanceDebtByExternalId({
+    appId: "app_test", externalUserId: "customer / test", currency: debt.currency
+  })).toEqual(debt);
+  const url = new URL(fetch.mock.calls[0][0]);
+  expect(url.pathname).toBe("/product-users/by-external-id/allowance-debt");
+  expect(url.searchParams.get("external_user_id")).toBe("customer / test");
+  expect(url.searchParams.get("currency")).toBe(debt.currency);
+});
+
+
+it("fetches product-user activity with filters and preserves charges, grant rates, metadata, and pagination", async () => {
+  const payload = {
+  "product_end_user_id": "peu_123",
+  "items": [
+    {
+      "id": "ue_123",
+      "type": "usage",
+      "label": "Agent replied",
+      "amount": "-4.000000000000",
+      "currency": "USD",
+      "status": "succeeded",
+      "created_at": "2026-10-26T12:00:00Z",
+      "model": "test-model",
+      "usage_metadata": {
+        "activity_label": "Agent replied",
+        "category": "support"
+      },
+      "base_allowance_charge_amount": "1.000000000000",
+      "credit_charge_amount": "3.000000000000",
+      "uncovered_charge_amount": "0.000000000000",
+      "credit_allocations": [
+        {
+          "credit_grant_id": "grant_123",
+          "amount": "3.000000000000",
+          "currency": "USD",
+          "metadata": {
+            "credits_per_usd": "1500"
+          }
+        }
+      ]
+    },
+    {
+      "id": "entry_123",
+      "type": "credit_added",
+      "label": "Credit purchase",
+      "amount": "10.000000000000",
+      "currency": "USD",
+      "status": "completed",
+      "created_at": "2026-10-25T12:00:00Z",
+      "credit_grant_id": "grant_123",
+      "metadata": {
+        "credits_per_usd": "1500"
+      }
+    }
+  ],
+  "next_cursor": "next_page",
+  "has_more": true,
+  "limit": 2
+};
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+  const client = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch });
+  const result = await client.productUsers.listActivityByExternalId({
+    appId: "app_123", externalUserId: "user_123", type: "usage",
+    from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z",
+    currency: "USD", cursor: "previous_page", limit: 2,
+  }, { headers: { "X-Request-ID": "history_123" } });
+  const [url, init] = fetch.mock.calls[0]!;
+  expect(new URL(url).pathname).toBe("/product-users/by-external-id/activity");
+  expect(Object.fromEntries(new URL(url).searchParams)).toEqual({
+    app_id: "app_123", external_user_id: "user_123", type: "usage",
+    from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z",
+    currency: "USD", cursor: "previous_page", limit: "2",
+  });
+  expect(new Headers(init.headers).get("authorization")).toBe("Bearer zrv_svc_test");
+  expect(new Headers(init.headers).get("x-request-id")).toBe("history_123");
+  expect(result).toEqual(payload);
+});
+
+it("omits unspecified activity filters from the HTTP request", async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    product_end_user_id: "peu_123", items: [], next_cursor: null, has_more: false, limit: 20,
+  }), { status: 200 }));
+  const client = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch });
+  const result = await client.productUsers.listActivityByExternalId({ appId: "app_123", externalUserId: "user_123" });
+  expect(Object.fromEntries(new URL(fetch.mock.calls[0]![0]).searchParams)).toEqual({
+    app_id: "app_123", external_user_id: "user_123",
+  });
+  expect(result.items).toEqual([]);
+});
+
+
+it.each([
+  ["getByExternalId", "", { external_user_id: "user_123" }, "external_user_id", "user_123"],
+  ["getCreditSummaryByExternalId", "/credit-summary", { available_credits: "0.000000000000" }, "available_credits", "0.000000000000"],
+  ["getAllowanceDebtByExternalId", "/allowance-debt", { outstanding_amount: "0.000000000000" }, "outstanding_amount", "0.000000000000"],
+  ["listCreditGrantsByExternalId", "/credit-grants", { credit_grants: [] }, "credit_grants", []],
+  ["listActivityByExternalId", "/activity", { items: [] }, "items", []],
+] as const)("%s only opts into product-user creation when the caller sends the header", async (method, suffix, payload, field, expected) => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: {
+      code: "zorveus_product_user_not_found", message: "User not found",
+    } }), { status: 404 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(payload), { status: 200 }));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch });
+  const params = { appId: "app_123", externalUserId: "user_123" };
+  await expect(service.productUsers[method](params)).rejects.toMatchObject({
+    status: 404, code: "zorveus_product_user_not_found",
+  });
+  const result = await service.productUsers[method](params, {
+    headers: { "X-Zorveus-Upsert-Product-User": "true" },
+  });
+  expect(result).toHaveProperty(field, expected);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(new URL(fetch.mock.calls[1]![0]).pathname).toBe("/product-users/by-external-id" + suffix);
+  expect(new Headers(fetch.mock.calls[0]![1].headers).has("x-zorveus-upsert-product-user")).toBe(false);
+  expect(new Headers(fetch.mock.calls[1]![1].headers).get("x-zorveus-upsert-product-user")).toBe("true");
+  expect(new Headers(fetch.mock.calls[1]![1].headers).get("authorization")).toBe("Bearer zrv_svc_test");
+});
+
+
+const directUpsertReadCases = [
+  ["getByExternalId", "", { external_user_id: "user_123" }, "external_user_id", "user_123"],
+  ["getCreditSummaryByExternalId", "/credit-summary", { available_credits: "0.000000000000" }, "available_credits", "0.000000000000"],
+  ["getAllowanceDebtByExternalId", "/allowance-debt", { outstanding_amount: "0.000000000000" }, "outstanding_amount", "0.000000000000"],
+  ["listCreditGrantsByExternalId", "/credit-grants", { credit_grants: [] }, "credit_grants", []],
+  ["listActivityByExternalId", "/activity", { items: [] }, "items", []],
+] as const;
+
+it.each(directUpsertReadCases)("%s supports the direct upsertIfMissing option without changing other request data", async (method, suffix, payload, field, expected) => {
+  const fetch = vi.fn().mockImplementation(async () => new Response(JSON.stringify(payload), { status: 200 }));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch });
+  for (const upsertIfMissing of [false, true]) {
+    const headers = {
+      "x-zorveus-upsert-product-user": upsertIfMissing ? "false" : "true", "X-Request-ID": "read_123",
+    };
+    const result = await service.productUsers[method]({
+      appId: "app_123", externalUserId: "user_123", upsertIfMissing,
+    }, { headers });
+    const [url, init] = fetch.mock.calls.at(-1)!;
+    const sentHeaders = new Headers(init.headers);
+    expect(result).toHaveProperty(field, expected);
+    expect(new URL(url).pathname).toBe("/product-users/by-external-id" + suffix);
+    expect(new URL(url).searchParams.has("upsertIfMissing")).toBe(false);
+    expect(init.body).toBeUndefined();
+    expect(sentHeaders.get("x-zorveus-upsert-product-user")).toBe(upsertIfMissing ? "true" : "false");
+    expect(sentHeaders.get("x-request-id")).toBe("read_123");
+    expect(sentHeaders.get("authorization")).toBe("Bearer zrv_svc_test");
+    expect(headers["x-zorveus-upsert-product-user"]).toBe(upsertIfMissing ? "false" : "true");
+  }
+});
+
+it.each(["X-Zorveus-Upsert-Product-User", "x-zorveus-upsert-product-user"])("the direct option overrides a client default in %s", async headerName => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ credit_grants: [] }), { status: 200 }));
+  const service = new ZorveusServiceClient({
+    apiKey: "zrv_svc_test", fetch, defaultHeaders: { [headerName]: "true" },
+  });
+  await service.productUsers.listCreditGrantsByExternalId({
+    appId: "app_123", externalUserId: "user_123", upsertIfMissing: false,
+  });
+  expect(new Headers(fetch.mock.calls[0]![1].headers).get("x-zorveus-upsert-product-user")).toBe("false");
+});
+
+it("rejects a string upsertIfMissing value before sending a request", async () => {
+  const fetch = vi.fn();
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch });
+  await expect(service.productUsers.getByExternalId({
+    appId: "app_123", externalUserId: "user_123", upsertIfMissing: "false" as unknown as boolean,
+  })).rejects.toThrow("upsertIfMissing must be a boolean");
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+
+const referencedCreditGrant = {
+  credit_grant_id: "pucg_retry",
+  external_reference: "purchase:payment/123?part=1",
+  org_id: "org_retry", app_id: "app_retry", product_end_user_id: "peu_retry",
+  amount: "5.000000000000", remaining_amount: "3.000000000000", currency: "USD",
+  source: "purchase", reason: null, status: "active", expires_at: null, metadata: null,
+  created_at: "2026-10-27T00:00:00Z", updated_at: "2026-10-27T00:00:00Z",
+};
+
+it("sends a durable grant reference and preserves it in the result", async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    product_user: { external_user_id: "customer_retry" }, credit_grant: referencedCreditGrant,
+    credit_summary: { available_credits: referencedCreditGrant.remaining_amount },
+  }), { status: 201 }));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_retry", fetch });
+  const result = await service.productUsers.grantCreditByExternalId({
+    appId: "app_retry", externalUserId: "customer_retry", amount: "5.000000000000",
+    source: "purchase", externalReference: referencedCreditGrant.external_reference,
+  });
+  expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({
+    app_id: "app_retry", external_user_id: "customer_retry", amount: "5.000000000000", currency: "USD",
+    source: "purchase", external_reference: referencedCreditGrant.external_reference,
+    display_name: null, email: null, reason: null, expires_at: null, metadata: null,
+  });
+  expect(result.credit_grant).toEqual(referencedCreditGrant);
+});
+
+it("retrieves one grant by reference with the customer and app scope", async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(referencedCreditGrant), { status: 200 }));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_retry", fetch });
+  const grant = await service.productUsers.getCreditGrantByExternalReference({
+    appId: "app_retry", externalUserId: "customer_retry", externalReference: referencedCreditGrant.external_reference,
+  });
+  const url = new URL(fetch.mock.calls[0]![0]);
+  expect(url.pathname).toBe("/product-users/by-external-id/credit-grants/by-reference");
+  expect(Object.fromEntries(url.searchParams)).toEqual({
+    app_id: "app_retry", external_user_id: "customer_retry", external_reference: referencedCreditGrant.external_reference,
+  });
+  expect(fetch.mock.calls[0]![1].method).toBe("GET");
+  expect(new Headers(fetch.mock.calls[0]![1].headers).get("authorization")).toBe("Bearer zrv_svc_retry");
+  expect(grant).toEqual(referencedCreditGrant);
+});
+
+it("preserves reference conflicts without retrying the grant", async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: {
+    code: "zorveus_product_user_credit_reference_conflict", message: "Different grant parameters",
+  } }), { status: 409 }));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_retry", fetch, maxRetries: 2 });
+  await expect(service.productUsers.grantCreditByExternalId({
+    appId: "app_retry", externalUserId: "customer_retry", amount: "6.000000000000",
+    externalReference: referencedCreditGrant.external_reference,
+  })).rejects.toMatchObject({ status: 409, code: "zorveus_product_user_credit_reference_conflict" });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it("keeps grant transport failures under caller-controlled retries", async () => {
+  const fetch = vi.fn().mockRejectedValue(new TypeError("Connection lost"));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_retry", fetch, maxRetries: 2 });
+  await expect(service.productUsers.grantCreditByExternalId({
+    appId: "app_retry", externalUserId: "customer_retry", amount: "5.000000000000",
+    externalReference: referencedCreditGrant.external_reference,
+  })).rejects.toThrow();
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+
+it("selects the allowance policy through headers and preserves exact returned units", async () => {
+  const exactUnits = "1.123456789012345678901234";
+  const fetchRequest = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    app_id: "app_123", external_user_id: "shop_123", allowance: { remaining_credit_units: exactUnits },
+  }), { status: 200 }));
+  const service = new ZorveusServiceClient({
+    apiKey: "zrv_svc_test", fetch: fetchRequest,
+    defaultHeaders: { "x-zorveus-inference-key": "zrv_old_default", "x-zorveus-key-alias": "old" },
+  });
+  const user = await service.productUsers.getByExternalId({
+    appId: "app_123", externalUserId: "shop_123", inferenceKey: "zrv_routing_test", keyAlias: "pro",
+    upsertIfMissing: true,
+  }, { headers: { "X-Zorveus-Inference-Key": "zrv_old_request" } });
+  const [url, options] = fetchRequest.mock.calls[0];
+  const headers = new Headers(options.headers);
+  expect(headers.get("Authorization")).toBe("Bearer zrv_svc_test");
+  expect(headers.get("X-Zorveus-Inference-Key")).toBe("zrv_routing_test");
+  expect(headers.get("X-Zorveus-Key-Alias")).toBe("pro");
+  expect(headers.get("X-Zorveus-Upsert-Product-User")).toBe("true");
+  expect(new URL(String(url)).searchParams.has("inference_key")).toBe(false);
+  expect(String(url)).not.toContain("zrv_routing_test");
+  expect(user.allowance?.remaining_credit_units).toBe(exactUnits);
+});
+
+it("sends the explicit grant conversion rate as a decimal string", async () => {
+  const fetchRequest = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    product_user: { app_id: "app_123", external_user_id: "shop_123" },
+    credit_grant: { credit_units_per_usd: "1500", remaining_credit_units: "3000" },
+    credit_summary: { remaining_credit_units: "3000" },
+  }), { status: 201 }));
+  const service = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch: fetchRequest });
+  const result = await service.productUsers.grantCreditByExternalId({
+    appId: "app_123", externalUserId: "shop_123", amount: "2", creditUnitsPerUsd: "1500",
+    externalReference: "purchase:123",
+  });
+  expect(JSON.parse(fetchRequest.mock.calls[0][1].body)).toMatchObject({
+    amount: "2", credit_units_per_usd: "1500", external_reference: "purchase:123",
+  });
+  expect(result.credit_grant.remaining_credit_units).toBe("3000");
+  expect(result.credit_summary.remaining_credit_units).toBe("3000");
 });

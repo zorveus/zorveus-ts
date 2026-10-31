@@ -43,16 +43,9 @@ npx tsx examples/node-scripts/management-demo.ts
 npx tsx examples/node-scripts/oauth-pkce-demo.ts
 ```
 
-The runner asks only for values required by the selected operation. Put common values in `.env` to accept them as prompt defaults:
+The runner asks only for values required by the selected operation. Put common values in a local `.env` file. App connections and BYOK credentials are configured in the dashboard
 
-```bash
-export ZORVEUS_TEST_PROVIDER="openai"
-export ZORVEUS_TEST_PROVIDER_API_KEY="disposable-provider-key"
-export ZORVEUS_TEST_PROVIDER_ROTATED_API_KEY="optional-second-disposable-key"
-npm run demo:runner
-```
-
-Provider credential creation, rotation, and deletion are separate menu options. Deletion requires typing the credential ID again. The OAuth demo remains separate because it requires browser authorization. Set `ZORVEUS_REVOKE_OAUTH_TOKEN=true` to revoke the issued OAuth token at the end.
+The OAuth demo requires browser authorization. Set `ZORVEUS_REVOKE_OAUTH_TOKEN=true` to revoke the issued OAuth token at the end
 
 The OpenAI adapter menu includes Responses, text-to-speech, transcription, translation, image and video generation, moderation, and file listing. Generated media defaults to `examples/output/`.
 

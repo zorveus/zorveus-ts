@@ -40,3 +40,37 @@ describe("Embeddings", () => {
     expect(result.data[0].embedding.length).toBe(3);
   });
 });
+
+
+it("sends request usage metadata separately from the product-user profile and supports header defaults", async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] })));
+  const client = new Zorveus({ apiKey: "zrv_test", fetch });
+  const usageMetadata = {
+    activity_id: "embedding_123",
+    activity_label: "Indexed document",
+    details: { document_id: "document_123", pages: [1, 2] }
+  };
+  await client.embeddings.create({
+    model: "zorveus/test-embedding",
+    input: ["Example document"],
+    zorveusMetadata: {
+      externalUserId: "user_123",
+      metadata: { plan: "pro" },
+      usageMetadata
+    }
+  }, {
+    headers: { "X-Zorveus-Usage-Metadata": JSON.stringify({ channel: "documents" }) }
+  });
+  const request = fetch.mock.calls[0][1] as RequestInit;
+  expect(JSON.parse(request.body as string)).toEqual({
+    model: "zorveus/test-embedding",
+    input: ["Example document"],
+    metadata: {
+      external_user_id: "user_123",
+      product_user: { metadata: { plan: "pro" } },
+      usage_metadata: usageMetadata
+    }
+  });
+  expect(new Headers(request.headers).get("X-Zorveus-Usage-Metadata"))
+    .toBe(JSON.stringify({ channel: "documents" }));
+});

@@ -1,3 +1,5 @@
+import type { UsageMetadata } from "./usage-metadata";
+
 export type ChatCompletionRole = "system" | "user" | "assistant" | "tool" | "function";
 
 export interface ChatMessageToolCall {
@@ -27,10 +29,14 @@ export interface ChatCompletionTool {
 }
 
 export interface ZorveusMetadata {
+  usageMetadata?: UsageMetadata;
   /**
    * The startup's external customer ID (e.g. "usr_ext_8842").
    */
   externalUserId?: string;
+  keyAlias?: string;
+  allowanceChange?: "prorate_increase";
+  allowanceStartsAt?: string;
 
   /**
    * Zorveus product end-user ID (e.g. "peu_...").
@@ -54,12 +60,16 @@ export interface ZorveusMetadata {
 }
 
 export interface ZorveusGatewayProductUserMetadata {
+  allowance_change?: "prorate_increase";
+  allowance_starts_at?: string;
   display_name?: string | null;
   email?: string | null;
   metadata?: Record<string, unknown> | null;
 }
 
 export interface ZorveusGatewayMetadata {
+  usage_metadata?: UsageMetadata;
+  key_alias?: string;
   external_user_id?: string;
   product_end_user_id?: string;
   product_user?: ZorveusGatewayProductUserMetadata;
@@ -73,24 +83,20 @@ export function formatGatewayMetadata(
 ): ZorveusGatewayMetadata | undefined {
   if (!meta) return undefined;
 
-  const result: ZorveusGatewayMetadata = {};
-
-  if (meta.externalUserId) {
-    result.external_user_id = meta.externalUserId;
-  }
-
-  if (meta.productEndUserId) {
-    result.product_end_user_id = meta.productEndUserId;
-  }
-
-  if (meta.displayName !== undefined || meta.userEmail !== undefined || meta.metadata !== undefined) {
-    result.product_user = {
-      display_name: meta.displayName ?? null,
-      email: meta.userEmail ?? null,
-      metadata: meta.metadata ?? null
-    };
-  }
-
+  const productUser = {
+    ...(meta.displayName !== undefined ? { display_name: meta.displayName } : {}),
+    ...(meta.userEmail !== undefined ? { email: meta.userEmail } : {}),
+    ...(meta.metadata !== undefined ? { metadata: meta.metadata } : {}),
+    ...(meta.allowanceChange !== undefined ? { allowance_change: meta.allowanceChange } : {}),
+    ...(meta.allowanceStartsAt !== undefined ? { allowance_starts_at: meta.allowanceStartsAt } : {})
+  };
+  const result: ZorveusGatewayMetadata = {
+    ...(meta.usageMetadata !== undefined ? { usage_metadata: meta.usageMetadata } : {}),
+    ...(meta.externalUserId ? { external_user_id: meta.externalUserId } : {}),
+    ...(meta.productEndUserId ? { product_end_user_id: meta.productEndUserId } : {}),
+    ...(meta.keyAlias !== undefined ? { key_alias: meta.keyAlias } : {}),
+    ...(Object.keys(productUser).length > 0 ? { product_user: productUser } : {})
+  };
   return Object.keys(result).length > 0 ? result : undefined;
 }
 

@@ -53,11 +53,20 @@ describe("Client Instantiation & Usage", () => {
     });
 
     expect(client.productUsers).toBeDefined();
-    expect(client.providerCredentials).toBeDefined();
     expect(client.usageEvents).toBeDefined();
   });
 
   it("throws error when ZorveusServiceClient is missing apiKey", () => {
     expect(() => new ZorveusServiceClient({ apiKey: "" })).toThrow("ZorveusServiceClient requires an 'apiKey'");
   });
+});
+
+
+it("does not retry a credit grant just because an idempotency header was supplied", async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "Try later" } }), { status: 503 }));
+  const client = new ZorveusServiceClient({ apiKey: "zrv_svc_test", fetch, maxRetries: 2 });
+  await expect(client.productUsers.grantCreditByExternalId({
+    appId: "app_test", externalUserId: "customer_test", amount: "1.00"
+  }, { idempotencyKey: "purchase_test" })).rejects.toMatchObject({ status: 503 });
+  expect(fetch).toHaveBeenCalledTimes(1);
 });

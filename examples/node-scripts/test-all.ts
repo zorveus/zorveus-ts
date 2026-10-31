@@ -5,7 +5,6 @@ import { stdin as input, stdout as output } from "process";
 import {
   Zorveus,
   ZorveusServiceClient,
-  normalInputTokens,
   parseZorveusGatewayError
 } from "../../packages/sdk/src/index";
 import { ZorveusOpenAI } from "../../packages/sdk/src/adapters/openai";
@@ -191,67 +190,6 @@ async function listCreditGrants(): Promise<void> {
 }
 
 
-async function listUsageEvents(): Promise<void> {
-  const response = await (await getServiceClient()).usageEvents.list({
-    appId: await getAppId(),
-    limit: Number(await ask("Limit", "20"))
-  });
-  console.table(response.events.map((event) => ({
-    request_id: event.zorveus_request_id,
-    model: event.model,
-    virtual_spend: event.virtual_spend,
-    wallet_charge: event.sell_cost,
-    cache_read_tokens: event.cache_read_input_tokens,
-    normal_input_tokens: normalInputTokens(event) ?? "unavailable",
-    status: event.status
-  })));
-  console.log(`More results: ${response.has_more}; next cursor: ${response.next_cursor ?? "none"}`);
-}
-
-async function listProviderCredentials(): Promise<void> {
-  const response = await (await getServiceClient()).providerCredentials.list();
-  console.table(response.provider_credentials.map((credential) => ({
-    id: credential.provider_credential_id,
-    provider: credential.provider,
-    name: credential.credential_name,
-    status: credential.status
-  })));
-}
-
-async function getProviderCredential(): Promise<void> {
-  const id = await requireValue("Provider credential ID", "ZORVEUS_TEST_PROVIDER_CREDENTIAL_ID");
-  console.dir(await (await getServiceClient()).providerCredentials.get(id), { depth: null });
-}
-
-async function createProviderCredential(): Promise<void> {
-  const response = await (await getServiceClient()).providerCredentials.create({
-    provider: await requireValue("Provider", "ZORVEUS_TEST_PROVIDER"),
-    credentialName: await ask("Credential name", `sdk-runner-${Date.now()}`),
-    apiKey: await requireValue("Disposable provider API key", "ZORVEUS_TEST_PROVIDER_API_KEY")
-  });
-  console.dir(response, { depth: null });
-}
-
-async function rotateProviderCredential(): Promise<void> {
-  const id = await requireValue("Provider credential ID", "ZORVEUS_TEST_PROVIDER_CREDENTIAL_ID");
-  const response = await (await getServiceClient()).providerCredentials.rotate(id, {
-    apiKey: await requireValue("New disposable provider API key", "ZORVEUS_TEST_PROVIDER_ROTATED_API_KEY")
-  });
-  console.dir(response, { depth: null });
-}
-
-async function deleteProviderCredential(): Promise<void> {
-  const id = await requireValue("Provider credential ID", "ZORVEUS_TEST_PROVIDER_CREDENTIAL_ID");
-  const confirmation = await ask(`Type ${id} to confirm deletion`);
-  if (confirmation !== id) throw new Error("Deletion cancelled.");
-  await (await getServiceClient()).providerCredentials.delete(id);
-  console.log(`Deleted ${id}.`);
-}
-
-async function listProviders(): Promise<void> {
-  console.table((await (await getServiceClient()).providerCredentials.listProviders()).providers);
-}
-
 async function getOpenAIAdapter(withAttribution = false): Promise<ZorveusOpenAI> {
   return new ZorveusOpenAI({
     apiKey: await requireValue("Inference key", "ZORVEUS_INFERENCE_KEY"),
@@ -417,13 +355,6 @@ const actions: RunnerAction[] = [
   { name: "Give a credit grant by external ID", run: grantCredit, changesData: true },
   { name: "Get a credit summary", run: getCreditSummary },
   { name: "List credit grants by external ID", run: listCreditGrants },
-  { name: "List cache-aware usage events", run: listUsageEvents },
-  { name: "List provider credentials", run: listProviderCredentials },
-  { name: "Get one provider credential", run: getProviderCredential },
-  { name: "Create a provider credential", run: createProviderCredential, changesData: true },
-  { name: "Rotate a provider credential", run: rotateProviderCredential, changesData: true },
-  { name: "Delete a provider credential", run: deleteProviderCredential, changesData: true },
-  { name: "List supported providers", run: listProviders },
   { name: "Check the OpenAI and Vercel adapters", run: testAdapters },
   { name: "Create an OpenAI Responses response", run: testOpenAIResponses, changesData: true },
   { name: "Generate speech audio", run: generateSpeech, changesData: true },

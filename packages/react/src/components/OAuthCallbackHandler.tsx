@@ -51,16 +51,11 @@ export function OAuthCallbackHandler({
 
     hasStartedRef.current = true;
 
-    if (error) {
-      onErrorRef.current?.(error, errorDescription);
-      setExchangeError(errorDescription || error);
-      setExchangeState("error");
-      return;
-    }
-
     const payload: Record<string, string> = {};
     if (code) payload.code = code;
     if (state) payload.state = state;
+    if (error) payload.error = error;
+    if (errorDescription) payload.error_description = errorDescription;
 
     // Mode A: Popup Window Flow (window.opener exists)
     if (window.opener) {
@@ -105,16 +100,31 @@ export function OAuthCallbackHandler({
 
     // Mode B: Direct SPA Redirect Flow (no window.opener)
     const ctx = contextRef.current;
-    if (!code || !ctx) return;
+    if (!ctx && !error) return;
 
     const codeVerifier = window.sessionStorage.getItem("zorveus_oauth_verifier");
-    if (!codeVerifier) {
+    if (code && !codeVerifier) {
       const msg = "Missing OAuth PKCE code verifier in session storage.";
       onErrorRef.current?.("missing_verifier", msg);
       setExchangeError(msg);
       setExchangeState("error");
       return;
     }
+
+    const expectedState = window.sessionStorage.getItem("zorveus_oauth_state");
+    const validation = ZorveusOAuth.validateCallback({
+      urlOrParams: urlParams,
+      expectedState: expectedState ?? ""
+    });
+    if (!validation.valid) {
+      const message = validation.errorDescription ?? "OAuth callback state did not match the pending authorization.";
+      onErrorRef.current?.(validation.error ?? "state_mismatch", message);
+      setExchangeError(message);
+      setExchangeState("error");
+      return;
+    }
+
+    if (!code || !codeVerifier || !ctx) return;
 
     setExchangeState("exchanging");
 

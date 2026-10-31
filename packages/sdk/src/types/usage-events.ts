@@ -1,3 +1,5 @@
+import type { UsageMetadata } from "./usage-metadata";
+
 /** Values are open-ended so newer API enum values do not break older clients. */
 export type CacheUsageBreakdownStatus =
   | "reported"
@@ -24,6 +26,11 @@ export type UsageEventStatus =
   | (string & {});
 
 export interface UsageEvent {
+  charged_credit_units?: string | null;
+  usage_metadata?: UsageMetadata | null;
+  product_user_charge_multiplier?: string | null;
+  product_user_charge_multiplier_source?: "app_connection" | "app" | "default" | null;
+  product_user_charge_amount?: string | null;
   usage_event_id: string;
   zorveus_request_id: string;
   app_id: string | null;

@@ -69,57 +69,31 @@ Request at least one model scope, such as `models:*`. The authorization server r
 
 Tokens stay in memory by default. Set `persistToken` to store the OAuth session in `localStorage`. Persistent browser tokens have more exposure to cross-site scripting attacks.
 
-## Use a token without OAuth
+## Keep Business credentials on your server
 
-Pass an inference key when the application does not need the wallet connection flow:
+For a product that pays for customer inference, send requests through your own authenticated backend. Choose the customer ID and plan key there. A `VITE_` environment variable is included in the browser bundle, so it cannot keep a Business inference key secret
 
-```tsx
-<ZorveusProvider
-	clientId="unused_for_inference_key_auth"
-	redirectUri="http://localhost:5173/oauth/callback"
-	inferenceKey={import.meta.env.VITE_ZORVEUS_INFERENCE_KEY}
->
-	<App />
-</ZorveusProvider>
-```
+For user-funded browser applications, use OAuth. `accessToken` and `tokenProvider` can supply a token that your application has already obtained for the current user. Do not use a session endpoint to hand out a shared Business key
 
-You can also resolve a session asynchronously:
+## Disconnect
 
-```tsx
-<ZorveusProvider
-	clientId="your_oauth_client_id"
-	redirectUri="http://localhost:5173/oauth/callback"
-	tokenProvider={async () => {
-		const response = await fetch("/api/zorveus/session");
-		if (!response.ok) return null;
-		return response.json();
-	}}
->
-	<App />
-</ZorveusProvider>
-```
+`useZorveusAuth().disconnect()` clears local session state. To end remote access, first call `ZorveusOAuth.revokeToken({ clientId, token: accessToken })` from `@zorveus/sdk`, then clear the local session after a confirmed response. Public browser clients omit the client secret. A network failure leaves remote revocation uncertain
 
-The resolver can return a token string, an OAuth session object, or `null`.
+## Stream chat in the connected session
 
-## Stream chat with product-user attribution
-
-Pass `zorveusMetadata` to `useZorveusInference()`. The hook adds it to every chat request that it creates.
+Call inference with the current user's OAuth connection. Its consent policy controls funding and spend limits. Business customer attribution and plan selection belong on your backend
 
 ```tsx
 import { useState } from "react";
 import { useZorveusInference, useZorveusModels } from "@zorveus/react";
 
-export function Chat({ customerId }: { customerId: string }) {
+export function Chat() {
 	const { models, isLoading: modelsLoading } = useZorveusModels();
-	const [model, setModel] = useState("openai/gpt-4.1-mini");
+	const [model, setModel] = useState("");
 	const { messages, input, setInput, submitPrompt, isStreaming, abort, error } =
 		useZorveusInference({
 			model,
-			systemPrompt: "Answer clearly and briefly.",
-			zorveusMetadata: {
-				externalUserId: customerId,
-				metadata: { plan: "growth" }
-			}
+			systemPrompt: "Answer clearly and briefly."
 		});
 
 	return (
@@ -129,6 +103,7 @@ export function Chat({ customerId }: { customerId: string }) {
 				disabled={modelsLoading}
 				onChange={(event) => setModel(event.target.value)}
 			>
+				<option value="" disabled>Select an available model</option>
 				{models.map((item) => (
 					<option key={item.id} value={item.id}>
 						{item.name || item.id}
@@ -143,7 +118,7 @@ export function Chat({ customerId }: { customerId: string }) {
 			))}
 
 			<input value={input} onChange={(event) => setInput(event.target.value)} />
-			<button onClick={() => void submitPrompt()} disabled={isStreaming || !input.trim()}>
+			<button onClick={() => void submitPrompt()} disabled={isStreaming || !model || !input.trim()}>
 				Send
 			</button>
 			{isStreaming && <button onClick={abort}>Stop</button>}
@@ -153,7 +128,7 @@ export function Chat({ customerId }: { customerId: string }) {
 }
 ```
 
-Use `productEndUserId` instead of `externalUserId` when you already know the Zorveus product-user ID.
+Use the session's available model catalog to choose a model before sending a request
 
 ## Call other inference resources
 

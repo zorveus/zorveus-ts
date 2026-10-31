@@ -67,7 +67,7 @@ export class HTTPTransport {
     });
 
     const isSafeMethod = method === "GET" || method === "HEAD" || method === "OPTIONS";
-    const isIdempotent = isSafeMethod || Boolean(options.isIdempotent || options.idempotencyKey);
+    const isIdempotent = isSafeMethod || options.isIdempotent === true;
 
     const maxRetries = isIdempotent ? (options.maxRetries ?? this.maxRetries) : 0;
     const timeoutMs = options.timeout ?? this.timeout;

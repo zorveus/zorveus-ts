@@ -7,7 +7,8 @@ import type {
   TokenRevocationParams,
   OAuthTokenResponse,
   CallbackValidationOptions,
-  CallbackValidationResult
+  CallbackValidationResult,
+  OAuthRevokeResponse
 } from "./types/oauth";
 
 /**
@@ -76,6 +77,16 @@ export class ZorveusOAuth {
       params = new URLSearchParams();
     }
 
+    const rawState = params.get("state");
+    const state = rawState && rawState !== "undefined" && rawState !== "null" ? rawState : undefined;
+    if (options.expectedState !== undefined && (!options.expectedState || state !== options.expectedState)) {
+      return {
+        valid: false,
+        error: "state_mismatch",
+        errorDescription: "State parameter does not match expected CSRF token"
+      };
+    }
+
     const rawError = params.get("error");
     const isRealError = rawError && rawError !== "undefined" && rawError !== "null";
     if (isRealError) {
@@ -98,15 +109,7 @@ export class ZorveusOAuth {
       };
     }
 
-    const rawState = params.get("state");
-    const state = rawState && rawState !== "undefined" && rawState !== "null" ? rawState : undefined;
-    if (options.expectedState && state !== options.expectedState) {
-      return {
-        valid: false,
-        error: "state_mismatch",
-        errorDescription: "State parameter does not match expected CSRF token"
-      };
-    }
+
 
     return {
       valid: true,
@@ -166,7 +169,7 @@ export class ZorveusOAuth {
   /**
    * Revokes an existing OAuth token or app connection using application/x-www-form-urlencoded.
    */
-  static async revokeToken(params: TokenRevocationParams): Promise<void> {
+  static async revokeToken(params: TokenRevocationParams): Promise<OAuthRevokeResponse> {
     const baseUrl = (params.baseURL || "https://api.zorveus.com").replace(/\/+$/, "");
     const url = `${baseUrl}/oauth/revoke`;
 
@@ -205,5 +208,6 @@ export class ZorveusOAuth {
       }
       throw createAPIError(response.status, errorBody);
     }
+    return response.json() as Promise<OAuthRevokeResponse>;
   }
 }
