@@ -1,4 +1,4 @@
-export type ProductUserStatus = "active" | "suspended";
+export type ProductUserStatus = "active" | "disabled" | "deleted";
 
 /**
  * App connection credit enforcement mode.
@@ -7,7 +7,7 @@ export type CreditMode = "disabled" | "track_only" | "enforce_if_present" | "enf
 export type AppConnectionCreditMode = CreditMode;
 export type OverrunPolicy = "limit_output" | "allow_overrun" | "carry_overrun_forward";
 
-export type CapPeriod = "daily" | "weekly" | "monthly" | "lifetime";
+export type CapPeriod = "daily" | "monthly" | "lifetime";
 
 /**
  * Error parameters returned by the gateway when an enforced allowance is insufficient.
@@ -44,6 +44,7 @@ export interface ProductUserCapResponse {
 export type ProductUserCap = ProductUserCapResponse;
 
 export interface UsageBucket {
+  product_user_charge_amount?: string;
   sell_cost: string; // 12-decimal string, e.g. "0.000045360000"
   input_tokens: number;
   output_tokens: number;
@@ -64,7 +65,15 @@ export interface ProductUserUsageSummary {
   total?: UsageBucket | null;
 }
 
+export interface ProductUserAllowanceAdjustment {
+  type: "prorate_increase";
+  configured_cap_amount: string;
+  effective_at: string;
+}
+
 export interface ProductUserAllowanceResponse {
+  remaining_credit_units?: string | null;
+  adjustment?: ProductUserAllowanceAdjustment | null;
   app_connection_id?: string | null;
   cap_source?: "product_end_user" | "app_connection" | null;
   cap_rule_id?: string | null;
@@ -84,6 +93,7 @@ export interface ProductUserAllowanceResponse {
 export type ProductUserAllowance = ProductUserAllowanceResponse;
 
 export interface ProductUserCreditSummaryResponse {
+  remaining_credit_units?: string | null;
   currency: string;
   available_credits: string; // Decimal string
   active_grant_count: number;
@@ -289,7 +299,8 @@ export interface ProductUserListResponse {
 
 export interface UpsertProductUserParams {
   orgId?: string;
-  appId?: string;
+  appId: string;
+  allowanceStartsAt?: string | null;
   externalUserId: string;
   displayName?: string | null;
   email?: string | null;
@@ -297,12 +308,16 @@ export interface UpsertProductUserParams {
 }
 
 export interface GetProductUserByExternalIdParams {
+  inferenceKey?: string;
+  keyAlias?: string;
+  upsertIfMissing?: boolean;
   appId: string;
   externalUserId: string;
   orgId?: string;
 }
 
 export interface GetProductUserCreditSummaryByExternalIdParams {
+  upsertIfMissing?: boolean;
   appId: string;
   externalUserId: string;
   currency?: string;
@@ -322,7 +337,10 @@ export type CreditGrantSource =
   | (string & {});
 
 export interface ProductUserCreditGrantResponse {
+  credit_units_per_usd?: string | null;
+  remaining_credit_units?: string | null;
   credit_grant_id: string;
+  external_reference?: string | null;
   org_id: string;
   app_id: string;
   product_end_user_id: string;
@@ -367,6 +385,8 @@ export interface GrantCreditParams {
 }
 
 export interface GrantCreditByExternalIdParams {
+  creditUnitsPerUsd?: string | null;
+  externalReference?: string;
   appId: string;
   externalUserId: string;
   amount: string; // Decimal string
@@ -388,6 +408,7 @@ export interface ListCreditGrantsParams {
 }
 
 export interface ListCreditGrantsByExternalIdParams {
+  upsertIfMissing?: boolean;
   appId: string;
   externalUserId: string;
   status?: CreditGrantStatus;
@@ -401,4 +422,19 @@ export interface ProductUserListParams {
   appId?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface ProductUserAllowanceDebtSummaryResponse {
+  outstanding_amount: string;
+  repaid_by_credits_total: string;
+  repaid_by_base_total: string;
+  currency: string;
+  oldest_debt_at: string | null;
+}
+
+export interface GetCreditGrantByExternalReferenceParams {
+  appId: string;
+  externalUserId: string;
+  externalReference: string;
+  orgId?: string;
 }

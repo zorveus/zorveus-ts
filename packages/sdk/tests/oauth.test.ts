@@ -108,3 +108,21 @@ describe("ZorveusOAuth PKCE & Token Exchange", () => {
     expect(token.app_connection_id).toBe("conn_123");
   });
 });
+
+
+it.each(["code=code_test", "error=access_denied"])("validates state before accepting %s", (query) => {
+  expect(ZorveusOAuth.validateCallback({ urlOrParams: `https://example.com/callback?${query}&state=wrong`, expectedState: "expected" }).error).toBe("state_mismatch");
+  expect(ZorveusOAuth.validateCallback({ urlOrParams: `https://example.com/callback?${query}&state=expected`, expectedState: "expected" }).error).not.toBe("state_mismatch");
+});
+
+it.each([true, false])("returns the revocation result for a public client: %s", async (revoked) => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ revoked })));
+  vi.stubGlobal("fetch", fetch);
+  try {
+    expect(await ZorveusOAuth.revokeToken({ token: "zrv_token_test", clientId: "client_test" })).toEqual({ revoked });
+    const payload = new URLSearchParams(fetch.mock.calls[0][1].body);
+    expect(payload.get("client_id")).toBe("client_test");
+    expect(payload.get("token")).toBe("zrv_token_test");
+    expect(payload.has("client_secret")).toBe(false);
+  } finally { vi.unstubAllGlobals(); }
+});

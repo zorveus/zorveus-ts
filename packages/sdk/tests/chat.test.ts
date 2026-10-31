@@ -57,12 +57,25 @@ describe("Chat Completions", () => {
       external_user_id: "usr_ext_8842",
       product_user: {
         display_name: "Alice",
-        email: "alice@example.com",
-        metadata: null
+        email: "alice@example.com"
       }
     });
     expect(res.choices[0].message.content).toBe("Hello there!");
 
     global.fetch = globalFetch;
+  });
+});
+
+
+it("sends plan selection and proration without erasing profile fields", async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [] })));
+  const client = new Zorveus({ apiKey: "zrv_route_test", fetch });
+  await client.chat.completions.create({
+    model: "zorveus/test-model", messages: [{ role: "user", content: "Hello" }],
+    zorveusMetadata: { externalUserId: "customer_test", keyAlias: "pro", allowanceChange: "prorate_increase", allowanceStartsAt: "2026-07-17T09:00:00Z" }
+  });
+  expect(JSON.parse(fetch.mock.calls[0][1].body).metadata).toEqual({
+    external_user_id: "customer_test", key_alias: "pro",
+    product_user: { allowance_change: "prorate_increase", allowance_starts_at: "2026-07-17T09:00:00Z" }
   });
 });

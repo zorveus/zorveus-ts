@@ -42,7 +42,7 @@ export interface ZorveusInferenceClientOptions {
 
 export interface ZorveusServiceClientOptions {
   /**
-   * Organization Service Key used for server-side management authentication (`zrv_service_...`).
+   * Organization Service Key used for server-side management authentication (`zrv_svc_...`).
    * WARNING: Never expose this key in browser client applications.
    */
   apiKey: string;

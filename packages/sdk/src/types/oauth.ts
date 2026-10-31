@@ -35,7 +35,7 @@ export interface TokenExchangeParams {
 
 export interface TokenRevocationParams {
   token: string;
-  clientId?: string;
+  clientId: string;
   clientSecret?: string;
   baseURL?: string;
 }
@@ -60,4 +60,8 @@ export interface CallbackValidationResult {
   state?: string;
   error?: string;
   errorDescription?: string;
+}
+
+export interface OAuthRevokeResponse {
+  readonly revoked: boolean;
 }

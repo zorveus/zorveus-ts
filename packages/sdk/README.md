@@ -29,7 +29,7 @@ The package provides these public clients and adapters:
 | Export | Import | Use it for | Credential |
 | --- | --- | --- | --- |
 | `Zorveus` | `@zorveus/sdk` | Native inference, models, and inference-key usage | Inference key or OAuth access token |
-| `ZorveusServiceClient` | `@zorveus/sdk` | Product users, credits, BYOK credentials, and usage events | Organization service key |
+| `ZorveusServiceClient` | `@zorveus/sdk` | Product users, credits, and allowance | Organization service key |
 | `ZorveusOAuth` | `@zorveus/sdk` | OAuth PKCE authorization and token management | OAuth client credentials |
 | `ZorveusOpenAI` | `@zorveus/sdk/openai` | The OpenAI JavaScript API pointed at Zorveus | Inference key or OAuth access token |
 | `createZorveus` | `@zorveus/sdk/vercel` | Vercel AI SDK models pointed at Zorveus | Inference key or OAuth access token |
@@ -75,7 +75,7 @@ const attribution = {
 };
 
 const completion = await client.chat.completions.create({
-  model: "openai/gpt-4.1-mini",
+  model: process.env.ZORVEUS_MODEL_ID!,
   messages: [{ role: "user", content: "Reply with OK" }],
   zorveusMetadata: attribution
 });
@@ -83,11 +83,41 @@ const completion = await client.chat.completions.create({
 
 You can pass `productEndUserId` instead of `externalUserId` when you already know the Zorveus product-user ID.
 
+### Attach business context to usage
+
+Use `zorveusMetadata.usageMetadata` for request activity. `zorveusMetadata.metadata` remains product-user profile data
+
+```typescript
+const result = await client.embeddings.create(
+	{
+		model: process.env.ZORVEUS_EMBEDDING_MODEL_ID!,
+		input: "Text to embed",
+		zorveusMetadata: {
+			externalUserId: authenticatedUserId,
+			usageMetadata: {
+				activity_id: "index_123",
+				activity_label: "Indexed document",
+				document_id: "doc_123",
+			},
+		},
+	},
+	{ headers: { "X-Zorveus-Usage-Metadata": JSON.stringify({ channel: "documents" }) } },
+);
+```
+
+Get `authenticatedUserId` from trusted application state. The same `zorveusMetadata.usageMetadata` option works on native chat calls, including streaming. The exported `UsageMetadata` type accepts JSON values
+
+The gateway shallow-merges the header object with the body object. Body keys win, and a nested body object replaces the matching header object. Each input and the merged object must fit within 4,096 UTF-8 bytes using compact JSON encoding. The raw header also has a 4,096-byte limit. Invalid JSON, non-object values, non-finite numbers, and oversized data are rejected before a billing reservation is created
+
+The backend captures this context for the resulting usage events and removes it before sending the provider request. `UsageEvent.usage_metadata` can be an object or `null`; older responses may omit the optional field. Existing dashboard permissions still apply, and diagnostic views without usage-detail permission redact it. Completion and embedding responses do not include the saved usage event
+
+`activity_id` and `activity_label` are optional business-defined fields. They do not group events, deduplicate requests, or change prices. Use `service.productUsers.listActivityByExternalId()` for customer activity history. See the [raw HTTP and SDK examples](https://docs.zorveus.com/inference/product-user-metadata#attach-business-context-to-usage-events) for the shared contract
+
 ### Stream a chat completion
 
 ```typescript
 const stream = await client.chat.completions.create({
-  model: "openai/gpt-4.1-mini",
+  model: process.env.ZORVEUS_MODEL_ID!,
   messages: [{ role: "user", content: "Count from one to five" }],
   stream: true,
   zorveusMetadata: { externalUserId: "customer-123" }
@@ -169,7 +199,7 @@ const openai = new ZorveusOpenAI({
 });
 
 const response = await openai.responses.create({
-  model: "openai/gpt-4.1-mini",
+  model: process.env.ZORVEUS_MODEL_ID!,
   input: "Reply with OK"
 });
 
@@ -193,7 +223,7 @@ const zorveus = createZorveus({
 });
 
 const result = streamText({
-  model: zorveus("openai/gpt-4.1-mini"),
+  model: zorveus(process.env.ZORVEUS_MODEL_ID!),
   prompt: "Reply with OK"
 });
 
@@ -228,7 +258,8 @@ const grant = await service.productUsers.grantCreditByExternalId({
   amount: "25.000000000000",
   currency: "USD",
   source: "promotion",
-  reason: "Welcome credit"
+  reason: "Welcome credit",
+  externalReference: "welcome:customer-123"
 });
 
 console.log(profile.product_user.product_end_user_id);
@@ -242,9 +273,49 @@ The product-user resource provides these methods:
 | `createOrUpdate(params)` | Create or update a user by external ID |
 | `upsert(params)` | Alias for `createOrUpdate()` |
 | `getByExternalId(params)` | Get a user by external ID |
+| `getAllowanceDebtByExternalId(params)` | Read carried allowance debt and repayments |
 | `getCreditSummaryByExternalId(params)` | Get the credit balance and consumption summary |
 | `grantCreditByExternalId(params)` | Grant credit by external ID |
+| `getCreditGrantByExternalReference(params)` | Recover one grant by its durable reference |
 | `listCreditGrantsByExternalId(params)` | List grants by external ID |
+
+### Opt into creating missing users on reads
+
+Product-user reads return HTTP 404 when the user is missing. Set `upsertIfMissing: true` to create one during the read:
+
+```typescript
+const profile = await service.productUsers.getByExternalId({
+	appId: "app_123",
+	externalUserId: authenticatedUserId,
+	upsertIfMissing: true,
+});
+```
+
+The `upsertIfMissing` parameter also works with `getCreditSummaryByExternalId`, `getAllowanceDebtByExternalId`, `listCreditGrantsByExternalId`, and `listActivityByExternalId`. Pass a boolean. The SDK sends `X-Zorveus-Upsert-Product-User` automatically. With no option or header, reads remain lookup-only. Explicit `false` overrides a conflicting request or client-default header. Existing raw-header calls remain supported when this parameter is omitted
+
+Creation requires an owned, non-deleted app and the normal product-user read scope. Existing profiles and statuses are preserved. Explicit upsert and credit-grant writes retain their creation behavior
+
+### List customer activity
+
+```typescript
+const page = await service.productUsers.listActivityByExternalId({
+	appId: "app_123",
+	externalUserId: authenticatedUserId,
+	limit: 20,
+});
+for (const item of page.items) {
+	console.log(item.label, item.amount, item.currency);
+	if (item.type === "usage") {
+		console.log(item.usage_metadata, item.credit_allocations);
+	}
+}
+```
+
+Optional filters are `type`, `from`, `to`, and `currency`. Pass `cursor: page.next_cursor!` only when `page.has_more`, retaining the same app, user, and filters. The limit defaults to 20 and accepts 1 to 100
+
+The discriminated items combine AI usage with recorded permanent credit movements. Usage amounts are negative product-user charges after markup. Usage items include base allowance and credit breakdowns, uncovered amounts, and per-grant allocations with saved conversion metadata. Unknown historical base and uncovered portions are `null`. Monetary fields stay decimal strings
+
+This customer-scoped endpoint uses `product_users:read`, returns 404 for missing users unless the upsert header is enabled, and does not expose organization wholesale costs. See [Product-user activity](https://docs.zorveus.com/startups/product-user-activity) for raw HTTP requests, complete responses, and UI rules
 
 ### Financial helper getters
 
@@ -262,52 +333,31 @@ The product-user resource provides these methods:
 
 Convenience getter properties (`totalAvailableAllowance`, `totalAvailableToSpend`, `totalCredits`, `capSpent`) are also available.
 
-## Manage BYOK credentials
+Omit `allowanceStartsAt` to preserve an existing subscription anchor. Send an ISO 8601 timestamp to set it or `null` to clear it. For an increase between plan keys, send `zorveusMetadata: { externalUserId, allowanceChange: "prorate_increase" }` on inference and read `profile.allowance?.adjustment` after that request
+
+### Recover an uncertain grant
+
+Set `externalReference` to a stable purchase or award identifier when creating a grant. Repeating the same reference and grant parameters returns the same grant. Different parameters return HTTP 409 with `zorveus_product_user_credit_reference_conflict`. The reference belongs to the organization and app, so service-key rotation does not change it
 
 ```typescript
-const credential = await service.providerCredentials.create({
-  provider: "openai",
-  credentialName: "Production OpenAI",
-  apiKey: process.env.OPENAI_API_KEY!
+const grant = await service.productUsers.getCreditGrantByExternalReference({
+	appId: "app_123", externalUserId: "customer-123",
+	externalReference: "welcome:customer-123",
 });
+console.log(grant.credit_grant_id, grant.remaining_amount);
 ```
 
-The provider-credential resource provides these methods:
+Lookup returns the grant directly, including its current balance and lifecycle status. It requires `product_users:read` or a scope that includes it. A lookup that returns 404 can race an unfinished creation. Repeat the original POST with the same reference and parameters to recover safely
 
-| Method | Operation |
-| --- | --- |
-| `create(params)` | Store an encrypted provider credential |
-| `list(params)` | List provider credentials |
-| `get(credentialId)` | Get credential metadata |
-| `rotate(credentialId, params)` | Replace the stored secret |
-| `delete(credentialId)` | Delete the credential |
-| `listProviders()` | List supported providers and authentication types |
+The SDK does not enable automatic POST retries merely because a reference is present. Calls without a reference remain independent grants. Neither metadata nor an `idempotencyKey` option supplies this guarantee. Keep payment verification and durable purchase records in your backend. Use decimal strings for money. See [grant retry rules](https://docs.zorveus.com/platform/idempotency)
 
-## Read finance usage events
+Configure app connections, inference keys, and BYOK credentials in the [dashboard](https://app.zorveus.com). Use the inference key with this SDK after setup
 
-```typescript
-import { normalInputTokens } from "@zorveus/sdk";
+## Read usage
 
-const page = await service.usageEvents.list({
-  orgId: "org_123",
-  appId: "app_123",
-  limit: 50
-});
+Use `client.getUsage()` for the inference key's current cap and spend. Use `service.productUsers.getByExternalId()` for customer allowance and usage. With a routing key, pass `{ headers: { "X-Zorveus-Key-Alias": "pro" } }` to `getUsage()` or as the second argument to `models.list()`
 
-for (const event of page.events) {
-  console.log({
-    virtualSpend: event.virtual_spend,
-    walletCharge: event.sell_cost,
-    providerCost: event.provider_cost,
-    cacheSavings: event.cache_savings,
-    normalInputTokens: normalInputTokens(event)
-  });
-}
-```
-
-`usageEvents.list()` accepts organization, app, connection, product-user, model, provider, billing-mode, status, time, limit, and cursor filters.
-
-Money values are decimal strings. Keep them as strings or use a decimal-number library. Do not use `parseFloat()` for financial calculations. `normalInputTokens()` returns `null` unless the provider supplied a valid cache breakdown.
+Detailed finance events require a dashboard session. `service.usageEvents.list()` rejects locally with `zorveus_dashboard_session_required` because an organization service key cannot authenticate that endpoint
 
 ## Use OAuth PKCE
 
@@ -351,6 +401,18 @@ OAuth methods:
 | `exchangeToken(params)` | Exchange an authorization code for an access token |
 | `revokeToken(params)` | Revoke an access token or app connection |
 
+Save the verifier and state before redirecting. Always pass the saved state to `validateCallback()`, including callbacks with an OAuth error. Public clients omit `clientSecret`; confidential backends supply it
+
+```typescript
+const revoked = await ZorveusOAuth.revokeToken({
+  clientId: "zrv_client_123",
+  token: storedAccessToken,
+});
+console.log(revoked.revoked);
+```
+
+A confirmed `revoked: false` can mean the connection was already revoked. Clear the local session after a confirmed response. On a network failure, remote revocation remains uncertain
+
 OAuth authorization requires `inference:write` and at least one model scope such as `models:*`.
 
 ## Handle errors
@@ -367,7 +429,7 @@ import {
 
 try {
   await client.chat.completions.create({
-    model: "openai/gpt-4.1-mini",
+    model: process.env.ZORVEUS_MODEL_ID!,
     messages: [{ role: "user", content: "Hello" }]
   });
 } catch (error) {
@@ -402,3 +464,59 @@ npm run demo:oauth
 ## License
 
 MIT © Zorveus Inc.
+
+
+## Product-user pricing
+
+A business can configure a `product_user_charge_multiplier` on its app and override it on a plan's app connection. A connection override of null inherits the app default, and 1 applies no added markup. Configure these values through the dashboard or the authenticated management API
+
+Select the customer's connection from trusted subscription data. Existing routing keys support this through `zorveusMetadata.keyAlias`, while `externalUserId` keeps the customer identity stable across plans
+
+```typescript
+const response = await client.chat.completions.create({
+  model: configuredModel,
+  messages,
+  zorveusMetadata: {
+    externalUserId: currentUser.id,
+    keyAlias: verifiedSubscription.plan
+  }
+});
+```
+
+The backend saves the resolved multiplier when reserving the request. For example, an organization wallet charge of $0.001 can consume $0.002 of product-user allowance at 2×. This applies to attributed product users on programmatic connections. Requests without product-user attribution and OAuth connections retain their existing behavior
+
+Usage records expose `product_user_charge_amount`, `product_user_charge_multiplier` and `product_user_charge_multiplier_source` separately from organization costs. Product-user usage buckets expose the summed `product_user_charge_amount`. The chat completion itself does not contain these billing fields
+
+The remaining credit and allowance helpers still return USD amounts. To display business credit units, multiply each grant's remaining USD by that grant's saved `metadata.credits_per_usd`. The backend has already applied the charge multiplier, so applying it again to the displayed balance would double it
+
+## Selected-key allowance reads and credit units
+
+The service client can read a customer's allowance using the direct inference key or routing key selected by your application. Keep both credentials on your backend. The service key authorizes the read, while the inference key selects the policy through a header
+
+```typescript
+const user = await service.productUsers.getByExternalId({
+	appId,
+	externalUserId: authenticatedUserId,
+	inferenceKey: selectedInferenceOrRoutingKey,
+	keyAlias: selectedRoutingAlias,
+	upsertIfMissing: true,
+});
+console.log(user.allowance?.remaining_credit_units);
+
+const receipt = await service.productUsers.grantCreditByExternalId({
+	appId,
+	externalUserId: authenticatedUserId,
+	externalReference: `purchase:${verifiedPayment.id}`,
+	amount: "2.000000000000",
+	creditUnitsPerUsd: "1500",
+	source: "purchase",
+});
+```
+
+Omit the alias for a direct key. Routing keys accept a member alias or their configured default. The upsert option enables the first read before any AI request. Changing the selected key reflects a new plan immediately without assigning a subscription inside Zorveus
+
+`allowance.remaining_credit_units` includes base allowance at the current app rate plus applicable grants at their own rates. `credits.remaining_credit_units` and `credit_summary.remaining_credit_units` count grants only. Existing amount getters and USD fields retain their currency meaning
+
+The $2 grant above starts with 3,000 units. Omit its rate to save the app default. A saved grant rate does not change when the app default changes. Older grants without a saved rate use the current app default. Include the same explicit rate when retrying a grant reference
+
+Activity returns `charged_credit_units`, saved from the actual allocations at settlement. Later app-rate changes do not recalculate it. Rates and quantities are decimal strings. Quantities can have more than 12 decimal places, and null means unavailable rather than zero
